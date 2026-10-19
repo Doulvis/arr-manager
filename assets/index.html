@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>Arr Manager</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header id="top">
+  <button id="backBtn" class="icon-btn" hidden></button>
+  <div id="title">Arr Manager</div>
+  <button id="webBtn" class="icon-btn" title="Interface web"></button>
+  <button id="refreshBtn" class="icon-btn" title="Actualiser"></button>
+</header>
+<nav id="subtabs" hidden></nav>
+<main id="view"></main>
+<nav id="bottom">
+  <button data-svc="radarr"><i data-ic="movie"></i><span>Radarr</span></button>
+  <button data-svc="sonarr"><i data-ic="tv"></i><span>Sonarr</span></button>
+  <button data-svc="prowlarr"><i data-ic="radar"></i><span>Prowlarr</span></button>
+  <button data-svc="settings"><i data-ic="settings"></i><span>Réglages</span></button>
+</nav>
+<div id="sheet-bg" hidden></div>
+<div id="sheet" hidden></div>
+<div id="toast" hidden></div>
+<script src="app.js"></script>
+</body>
+</html>

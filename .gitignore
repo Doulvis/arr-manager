@@ -1,0 +1,16 @@
+# build output
+build/
+*.apk
+*.idsig
+
+# signing keys — never commit them
+*.jks
+*.keystore
+*.p12
+
+# local / editor files
+local.properties
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
