@@ -50,7 +50,9 @@ public class WebActivity extends Activity {
                 try {
                     startActivity(new Intent(Intent.ACTION_VIEW, request.getUrl()));
                 } catch (Exception e) {
-                    Toast.makeText(WebActivity.this, "Lien non pris en charge", Toast.LENGTH_SHORT).show();
+                    boolean fr = "fr".equals(java.util.Locale.getDefault().getLanguage());
+                    Toast.makeText(WebActivity.this, fr ? "Lien non pris en charge" : "Unsupported link",
+                            Toast.LENGTH_SHORT).show();
                 }
                 return true;
             }

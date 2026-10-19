@@ -13,16 +13,16 @@ param(
     [int]$VersionCode = $(if ($env:VERSION_CODE) { [int]$env:VERSION_CODE } else { 1 })
 )
 $ErrorActionPreference = 'Continue'
-function Fail($msg) { Write-Host "ECHEC: $msg" -ForegroundColor Red; exit 1 }
+function Fail($msg) { Write-Host "FAILED: $msg" -ForegroundColor Red; exit 1 }
 function Check($step) { if ($LASTEXITCODE -ne 0) { Fail $step } }
 
 if ($JdkDir) { $env:JAVA_HOME = $JdkDir; $env:Path = "$JdkDir\bin;$env:Path" }
-if (-not (Get-Command javac -ErrorAction SilentlyContinue)) { Fail 'javac introuvable (installe un JDK 17 ou passe -JdkDir)' }
+if (-not (Get-Command javac -ErrorAction SilentlyContinue)) { Fail 'javac not found (install JDK 17 or pass -JdkDir)' }
 $androidJar = "$SdkDir\platforms\android-34\android.jar"
-if (-not (Test-Path $androidJar)) { Fail "android.jar introuvable dans $SdkDir (sdkmanager `"platforms;android-34`")" }
+if (-not (Test-Path $androidJar)) { Fail "android.jar not found in $SdkDir (sdkmanager `"platforms;android-34`")" }
 $bt = Get-ChildItem "$SdkDir\build-tools" -Directory -ErrorAction SilentlyContinue |
     Sort-Object { [version]($_.Name -replace '-.*$', '') } | Select-Object -Last 1 -ExpandProperty FullName
-if (-not $bt) { Fail "aucun build-tools dans $SdkDir (sdkmanager `"build-tools;34.0.0`")" }
+if (-not $bt) { Fail "no build-tools found in $SdkDir (sdkmanager `"build-tools;34.0.0`")" }
 
 $p = $PSScriptRoot
 $b = "$p\build"
@@ -50,7 +50,7 @@ if ($ok -ne 0) { Fail 'aapt add' }
 $ks = $env:ARR_KEYSTORE; $ksPass = $env:ARR_KEYSTORE_PASSWORD
 $alias = $env:ARR_KEY_ALIAS; $keyPass = $env:ARR_KEY_PASSWORD
 if (-not $ks) {
-    Write-Host 'ARR_KEYSTORE non defini : signature avec une cle de debug temporaire.' -ForegroundColor Yellow
+    Write-Host 'ARR_KEYSTORE not set: signing with a throwaway debug key.' -ForegroundColor Yellow
     $ks = "$b\debug.jks"; $ksPass = 'android'; $alias = 'debug'; $keyPass = 'android'
     & keytool -genkeypair -keystore $ks -storepass $ksPass -keypass $keyPass -alias $alias `
         -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug" 2>$null | Out-Null; Check 'keytool'

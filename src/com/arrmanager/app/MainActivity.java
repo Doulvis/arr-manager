@@ -110,7 +110,9 @@ public class MainActivity extends Activity {
             i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
             startActivity(i);
         } catch (Exception e) {
-            Toast.makeText(this, "Aucune application ne peut ouvrir ce lien", Toast.LENGTH_LONG).show();
+            boolean fr = "fr".equals(java.util.Locale.getDefault().getLanguage());
+            Toast.makeText(this, fr ? "Aucune application ne peut ouvrir ce lien" : "No app can open this link",
+                    Toast.LENGTH_LONG).show();
         }
     }
 

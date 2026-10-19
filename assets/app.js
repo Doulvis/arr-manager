@@ -31,6 +31,21 @@ const I = {
 const icon = (n, cls = '') => `<svg class="ic ${cls}" viewBox="0 0 24 24"><path d="${I[n]}"/></svg>`;
 
 /* =========================================================================
+ * Language (French / English)
+ * ========================================================================= */
+let LANG = 'en';
+/** Inline translation: L('texte français', 'English text'). */
+const L = (fr, en) => LANG === 'fr' ? fr : en;
+const LOC = () => LANG === 'fr' ? 'fr-FR' : 'en-US';
+const dec = s => LANG === 'fr' ? String(s).replace('.', ',') : String(s);
+const plural = (n, fr, en) => `${n} ${LANG === 'fr' ? fr : en}${n === 1 ? '' : 's'}`;
+function applyLang() {
+  const sys = (navigator.language || 'en').toLowerCase().startsWith('fr') ? 'fr' : 'en';
+  LANG = cfg.lang === 'fr' || cfg.lang === 'en' ? cfg.lang : sys;
+  document.documentElement.lang = LANG;
+}
+
+/* =========================================================================
  * Utilities
  * ========================================================================= */
 const $ = (s, r = document) => r.querySelector(s);
@@ -44,19 +59,20 @@ const chk = (id, label, on) => `<label class="check"><input type="checkbox" id="
 const loading = (msg = '') => `<div class="center col"><div class="spinner"></div>${msg ? `<div class="muted small">${esc(msg)}</div>` : ''}</div>`;
 
 function fmtSize(b) {
-  if (!b) return '0 o';
-  const u = ['o', 'Ko', 'Mo', 'Go', 'To'];
+  if (!b) return LANG === 'fr' ? '0 o' : '0 B';
+  const u = LANG === 'fr' ? ['o', 'Ko', 'Mo', 'Go', 'To'] : ['B', 'KB', 'MB', 'GB', 'TB'];
   let i = 0;
   while (b >= 1024 && i < u.length - 1) { b /= 1024; i++; }
-  return b.toFixed(i >= 3 ? 2 : i ? 1 : 0).replace('.', ',') + ' ' + u[i];
+  return dec(b.toFixed(i >= 3 ? 2 : i ? 1 : 0)) + ' ' + u[i];
 }
 function fmtDate(d, withTime) {
   if (!d) return '—';
   const x = new Date(d);
   if (isNaN(x)) return '—';
-  return x.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' }) +
-    (withTime ? ' ' + x.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) : '');
+  return x.toLocaleDateString(LOC(), { day: 'numeric', month: 'short', year: 'numeric' }) +
+    (withTime ? ' ' + x.toLocaleTimeString(LOC(), { hour: '2-digit', minute: '2-digit' }) : '');
 }
+const fmtTime = d => new Date(d).toLocaleTimeString(LOC(), { hour: '2-digit', minute: '2-digit' });
 function fmtAge(d) {
   const m = (Date.now() - new Date(d)) / 60000;
   if (isNaN(m)) return '—';
@@ -64,10 +80,11 @@ function fmtAge(d) {
   const h = m / 60;
   if (h < 24) return Math.round(h) + ' h';
   const days = h / 24;
-  if (days < 60) return Math.round(days) + ' j';
-  if (days < 730) return Math.round(days / 30) + ' mois';
-  return (days / 365).toFixed(1).replace('.', ',') + ' ans';
+  if (days < 60) return Math.round(days) + L(' j', ' d');
+  if (days < 730) return Math.round(days / 30) + L(' mois', ' mo');
+  return dec((days / 365).toFixed(1)) + L(' ans', ' y');
 }
+const ago = d => L(`il y a ${fmtAge(d)}`, `${fmtAge(d)} ago`);
 const fmtRuntime = min => !min ? '' : (min >= 60 ? `${Math.floor(min / 60)} h ${pad2(min % 60)}` : `${min} min`);
 function kv(rows) {
   const r = rows.filter(([, v]) => v !== null && v !== undefined && v !== '' && v !== false);
@@ -84,6 +101,7 @@ const SERVICES = {
   prowlarr: { name: 'Prowlarr', ver: 'v1', color: '#e66000', port: 9696 },
 };
 let cfg = loadCfg();
+applyLang();
 
 function loadCfg() {
   let s = '';
@@ -93,6 +111,7 @@ function loadCfg() {
   for (const k of Object.keys(SERVICES)) c[k] = Object.assign({ url: '', apiKey: '' }, c[k]);
   c.insecure = !!c.insecure;
   c.prefs = c.prefs || {};
+  c.lang = c.lang || 'auto';
   return c;
 }
 function saveCfg() {
@@ -131,24 +150,24 @@ function httpRaw(method, url, headers, body) {
     .then(async r => ({ status: r.status, body: await r.text(), err: '' }), e => ({ status: 0, body: '', err: String(e) }));
 }
 async function api(svc, method, path, body, allowFail) {
-  if (!configured(svc)) throw new Error(`${SERVICES[svc].name} n'est pas configuré (onglet Réglages).`);
+  if (!configured(svc)) throw new Error(L(`${SERVICES[svc].name} n'est pas configuré (onglet Réglages).`, `${SERVICES[svc].name} is not configured (Settings tab).`));
   const url = `${baseUrl(svc)}/api/${SERVICES[svc].ver}${path}`;
   const r = await httpRaw(method, url, {
     'X-Api-Key': cfg[svc].apiKey.trim(), 'Accept': 'application/json', 'Content-Type': 'application/json',
   }, body != null ? JSON.stringify(body) : '');
-  if (r.status === 0) throw new Error('Connexion impossible : ' + (r.err || 'erreur réseau'));
+  if (r.status === 0) throw new Error(L('Connexion impossible : ', 'Unable to connect: ') + (r.err || L('erreur réseau', 'network error')));
   let data = null;
   if (r.body) { try { data = JSON.parse(r.body); } catch (e) { data = r.body; } }
-  if (r.status === 401) throw new Error('Clé API refusée (401). Vérifie la clé dans les Réglages.');
+  if (r.status === 401) throw new Error(L('Clé API refusée (401). Vérifie la clé dans les Réglages.', 'API key rejected (401). Check the key in Settings.'));
   if (r.status >= 400 && allowFail && typeof data === 'object') return data;
   if (r.status >= 400) {
     let msg = '';
     if (Array.isArray(data)) msg = data.map(x => x.errorMessage || x.message).filter(Boolean).join('\n');
     else if (data && typeof data === 'object') msg = data.message || data.title || data.error || data.description || '';
     else if (typeof data === 'string') msg = data.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 200);
-    throw new Error(msg || `Erreur HTTP ${r.status}`);
+    throw new Error(msg || L(`Erreur HTTP ${r.status}`, `HTTP error ${r.status}`));
   }
-  if (typeof data === 'string' && /^\s*</.test(data)) throw new Error("Réponse inattendue (page HTML). Vérifie l'URL et la base URL du service.");
+  if (typeof data === 'string' && /^\s*</.test(data)) throw new Error(L("Réponse inattendue (page HTML). Vérifie l'URL et la base URL du service.", 'Unexpected response (HTML page). Check the URL and the service base URL.'));
   return data;
 }
 const GET = (s, p) => api(s, 'GET', p);
@@ -157,7 +176,7 @@ const PUT = (s, p, b) => api(s, 'PUT', p, b);
 const DEL = (s, p) => api(s, 'DELETE', p);
 async function command(svc, name, extra = {}, label) {
   await POST(svc, '/command', { name, ...extra });
-  toast(`${label || name} : lancé ✓`);
+  toast(`${label || name}${L(' : lancé ✓', ': started ✓')}`);
 }
 
 /* Cache */
@@ -224,11 +243,11 @@ function closeSheet() {
   if (cb) cb(null);
 }
 /** Confirmation sheet with optional checkboxes. Resolves to {key:bool} or null if cancelled. */
-function confirmSheet({ title, msg = '', ok = 'Confirmer', danger = false, checks = [] }) {
+function confirmSheet({ title, msg = '', ok = L('Confirmer', 'Confirm'), danger = false, checks = [] }) {
   return new Promise(res => {
     const sh = openSheet(`<h2>${esc(title)}</h2>${msg ? `<p class="muted">${esc(msg)}</p>` : ''}
       ${checks.map(c => `<label class="check"><input type="checkbox" data-k="${c.k}"${c.on ? ' checked' : ''}> ${esc(c.label)}</label>`).join('')}
-      <div class="sheet-actions"><button class="btn ghost" data-r="0">Annuler</button><button class="btn ${danger ? 'danger fill' : 'primary'}" data-r="1">${esc(ok)}</button></div>`);
+      <div class="sheet-actions"><button class="btn ghost" data-r="0">${L('Annuler', 'Cancel')}</button><button class="btn ${danger ? 'danger fill' : 'primary'}" data-r="1">${esc(ok)}</button></div>`);
     sheetOnClose = res;
     $('[data-r="0"]', sh).onclick = closeSheet;
     $('[data-r="1"]', sh).onclick = () => {
@@ -241,7 +260,7 @@ function confirmSheet({ title, msg = '', ok = 'Confirmer', danger = false, check
 /** Form sheet: onOk(sheet) may throw → error toast, sheet stays open. */
 function formSheet(title, body, okLabel, onOk) {
   const sh = openSheet(`<h2>${esc(title)}</h2><div class="form">${body}</div>
-    <div class="sheet-actions"><button class="btn ghost" id="sh-cancel">Annuler</button><button class="btn primary" id="sh-ok">${esc(okLabel)}</button></div>`);
+    <div class="sheet-actions"><button class="btn ghost" id="sh-cancel">${L('Annuler', 'Cancel')}</button><button class="btn primary" id="sh-ok">${esc(okLabel)}</button></div>`);
   $('#sh-cancel', sh).onclick = closeSheet;
   $('#sh-ok', sh).onclick = e => act(e.currentTarget, async () => { await onOk(sh); closeSheet(); });
   return sh;
@@ -252,7 +271,7 @@ async function act(btn, fn) {
   finally { if (btn) { btn.disabled = false; btn.classList.remove('busy'); } }
 }
 function showError(box, e) {
-  box.innerHTML = `<div class="error-box"><b>Erreur</b><p>${esc(e.message || e)}</p><button class="btn small" id="retry">${icon('refresh')} Réessayer</button></div>`;
+  box.innerHTML = `<div class="error-box"><b>${L('Erreur', 'Error')}</b><p>${esc(e.message || e)}</p><button class="btn small" id="retry">${icon('refresh')} ${L('Réessayer', 'Retry')}</button></div>`;
   $('#retry', box).onclick = () => render();
 }
 
@@ -268,12 +287,12 @@ const state = {
 const scrollPos = {};
 let pendingScroll = null;
 let timers = [];
-const TABS = {
-  radarr: [['library', 'Films'], ['add', 'Ajouter'], ['queue', 'Téléchargements'], ['calendar', 'Calendrier'], ['history', 'Historique'], ['blocklist', 'Liste noire'], ['system', 'Système']],
-  sonarr: [['library', 'Séries'], ['add', 'Ajouter'], ['queue', 'Téléchargements'], ['wanted', 'Manquants'], ['calendar', 'Calendrier'], ['history', 'Historique'], ['blocklist', 'Liste noire'], ['system', 'Système']],
-  prowlarr: [['search', 'Recherche'], ['indexers', 'Indexeurs'], ['stats', 'Statistiques'], ['apps', 'Applications'], ['history', 'Historique'], ['system', 'Système']],
+const TABS = () => ({
+  radarr: [['library', L('Films', 'Movies')], ['add', L('Ajouter', 'Add')], ['queue', L('Téléchargements', 'Downloads')], ['calendar', L('Calendrier', 'Calendar')], ['history', L('Historique', 'History')], ['blocklist', L('Liste noire', 'Blocklist')], ['system', L('Système', 'System')]],
+  sonarr: [['library', L('Séries', 'Series')], ['add', L('Ajouter', 'Add')], ['queue', L('Téléchargements', 'Downloads')], ['wanted', L('Manquants', 'Wanted')], ['calendar', L('Calendrier', 'Calendar')], ['history', L('Historique', 'History')], ['blocklist', L('Liste noire', 'Blocklist')], ['system', L('Système', 'System')]],
+  prowlarr: [['search', L('Recherche', 'Search')], ['indexers', L('Indexeurs', 'Indexers')], ['stats', L('Statistiques', 'Stats')], ['apps', 'Applications'], ['history', L('Historique', 'History')], ['system', L('Système', 'System')]],
   settings: [],
-};
+});
 const PAGES = {
   radarr: {
     library: b => libraryPage(b, 'radarr'), add: b => addPage(b, 'radarr'), queue: b => queuePage(b, 'radarr'),
@@ -293,6 +312,13 @@ const PAGES = {
 };
 const scrollKey = () => `${state.svc}|${state.tabs[state.svc]}|${state.stack.length}`;
 
+function renderChrome() {
+  const names = { radarr: 'Radarr', sonarr: 'Sonarr', prowlarr: 'Prowlarr', settings: L('Réglages', 'Settings') };
+  $$('#bottom button').forEach(b => { $('span', b).textContent = names[b.dataset.svc]; });
+  $('#webBtn').title = L('Interface web', 'Web interface');
+  $('#refreshBtn').title = L('Actualiser', 'Refresh');
+}
+
 function render() {
   timers.forEach(clearInterval); timers = [];
   const view = $('#view');
@@ -305,10 +331,11 @@ function render() {
   $('#refreshBtn').hidden = svc === 'settings';
 
   const sub = $('#subtabs');
-  if (top || !TABS[svc].length || (svc !== 'settings' && !configured(svc))) sub.hidden = true;
+  const tabs = TABS()[svc];
+  if (top || !tabs.length || (svc !== 'settings' && !configured(svc))) sub.hidden = true;
   else {
     sub.hidden = false;
-    sub.innerHTML = TABS[svc].map(([k, l]) => `<button data-tab="${k}" class="${state.tabs[svc] === k ? 'active' : ''}">${l}</button>`).join('');
+    sub.innerHTML = tabs.map(([k, l]) => `<button data-tab="${k}" class="${state.tabs[svc] === k ? 'active' : ''}">${l}</button>`).join('');
     const a = $('.active', sub);
     if (a) sub.scrollLeft = a.offsetLeft - sub.clientWidth / 2 + a.clientWidth / 2;
   }
@@ -319,7 +346,7 @@ function render() {
   let fn;
   if (top) { $('#title').textContent = top.title || ''; fn = top.render; }
   else {
-    $('#title').textContent = svc === 'settings' ? 'Réglages' : SERVICES[svc].name;
+    $('#title').textContent = svc === 'settings' ? L('Réglages', 'Settings') : SERVICES[svc].name;
     if (svc !== 'settings' && !configured(svc)) return notConfigured(box, svc);
     fn = PAGES[svc][state.tabs[svc]];
   }
@@ -355,100 +382,103 @@ window.__onBack = () => {
 };
 
 function notConfigured(box, svc) {
+  const n = SERVICES[svc].name;
   box.innerHTML = `<div class="empty-state">${icon(svc === 'radarr' ? 'movie' : svc === 'sonarr' ? 'tv' : 'radar')}
-    <h2>${SERVICES[svc].name} n'est pas configuré</h2>
-    <p class="muted">Ajoute l'URL et la clé API de ${SERVICES[svc].name} dans les réglages pour commencer.</p>
-    <button class="btn primary" id="go">${icon('settings')} Ouvrir les réglages</button></div>`;
+    <h2>${L(`${n} n'est pas configuré`, `${n} is not configured`)}</h2>
+    <p class="muted">${L(`Ajoute l'URL et la clé API de ${n} dans les réglages pour commencer.`, `Add the ${n} URL and API key in Settings to get started.`)}</p>
+    <button class="btn primary" id="go">${icon('settings')} ${L('Ouvrir les réglages', 'Open settings')}</button></div>`;
   $('#go', box).onclick = () => goTab('settings', 'main');
 }
 
 /* =========================================================================
  * Library (Radarr movies / Sonarr series)
  * ========================================================================= */
-const MSTATUS = { tba: 'À déterminer', announced: 'Annoncé', inCinemas: 'Au cinéma', released: 'Sorti', deleted: 'Supprimé' };
-const AVAIL = { announced: 'Annoncé', inCinemas: 'Au cinéma', released: 'Sorti' };
-const SSTATUS = { continuing: 'En cours', ended: 'Terminée', upcoming: 'À venir', deleted: 'Supprimée' };
-const STYPE = { standard: 'Standard', daily: 'Quotidienne', anime: 'Anime' };
+const MSTATUS = () => ({ tba: L('À déterminer', 'TBA'), announced: L('Annoncé', 'Announced'), inCinemas: L('Au cinéma', 'In cinemas'), released: L('Sorti', 'Released'), deleted: L('Supprimé', 'Deleted') });
+const AVAIL = () => ({ announced: L('Annoncé', 'Announced'), inCinemas: L('Au cinéma', 'In cinemas'), released: L('Sorti', 'Released') });
+const SSTATUS = () => ({ continuing: L('En cours', 'Continuing'), ended: L('Terminée', 'Ended'), upcoming: L('À venir', 'Upcoming'), deleted: L('Supprimée', 'Deleted') });
+const STYPE = () => ({ standard: 'Standard', daily: L('Quotidienne', 'Daily'), anime: 'Anime' });
 
 function movieStatus(m) {
-  if (m.hasFile) return ['ok', 'Disponible'];
-  if (!m.monitored) return ['off', 'Non surveillé'];
-  if (m.isAvailable) return ['bad', 'Manquant'];
-  return ['soon', MSTATUS[m.status] || 'À venir'];
+  if (m.hasFile) return ['ok', L('Disponible', 'Downloaded')];
+  if (!m.monitored) return ['off', L('Non surveillé', 'Unmonitored')];
+  if (m.isAvailable) return ['bad', L('Manquant', 'Missing')];
+  return ['soon', MSTATUS()[m.status] || L('À venir', 'Upcoming')];
 }
 function seriesStatus(s) {
   const st = s.statistics || {};
-  if (!s.monitored) return ['off', 'Non surveillée'];
-  if (st.episodeCount && st.episodeFileCount >= st.episodeCount) return ['ok', s.status === 'ended' ? 'Complète' : 'À jour'];
-  if ((st.episodeFileCount || 0) < (st.episodeCount || 0)) return ['bad', 'Incomplète'];
-  return ['soon', 'À venir'];
+  if (!s.monitored) return ['off', L('Non surveillée', 'Unmonitored')];
+  if (st.episodeCount && st.episodeFileCount >= st.episodeCount) return ['ok', s.status === 'ended' ? L('Complète', 'Complete') : L('À jour', 'Up to date')];
+  if ((st.episodeFileCount || 0) < (st.episodeCount || 0)) return ['bad', L('Incomplète', 'Incomplete')];
+  return ['soon', L('À venir', 'Upcoming')];
 }
 const rating = x => x.ratings?.imdb?.value ?? x.ratings?.tmdb?.value ?? x.ratings?.value ?? 0;
 const sizeOf = x => x.sizeOnDisk ?? x.statistics?.sizeOnDisk ?? 0;
-const SORTS = [['title', 'Titre (A→Z)'], ['added', 'Ajout récent'], ['year', 'Année'], ['rating', 'Note'], ['size', 'Taille']];
+const SORTS = () => [['title', L('Titre (A→Z)', 'Title (A→Z)')], ['added', L('Ajout récent', 'Recently added')], ['year', L('Année', 'Year')], ['rating', L('Note', 'Rating')], ['size', L('Taille', 'Size')]];
 const LIB = {
   radarr: {
-    key: 'radarr:movies', path: '/movie', noun: 'films',
-    filters: [['all', 'Tous'], ['monitored', 'Surveillés'], ['missing', 'Manquants'], ['downloaded', 'Téléchargés'], ['upcoming', 'À venir'], ['unmonitored', 'Non surveillés']],
+    key: 'radarr:movies', path: '/movie',
+    noun: () => L('films', 'movies'),
+    filters: () => [['all', L('Tous', 'All')], ['monitored', L('Surveillés', 'Monitored')], ['missing', L('Manquants', 'Missing')], ['downloaded', L('Téléchargés', 'Downloaded')], ['upcoming', L('À venir', 'Upcoming')], ['unmonitored', L('Non surveillés', 'Unmonitored')]],
     filter: (m, f) => f === 'monitored' ? m.monitored : f === 'missing' ? (m.monitored && !m.hasFile && m.isAvailable)
       : f === 'downloaded' ? m.hasFile : f === 'upcoming' ? (!m.hasFile && !m.isAvailable) : f === 'unmonitored' ? !m.monitored : true,
     sub: m => m.year || '', status: movieStatus, progress: null,
     open: (id, t) => openMovie(id, t),
-    missingCmd: ['MissingMoviesSearch', 'Recherche des films manquants'],
+    missingCmd: () => ['MissingMoviesSearch', L('Recherche des films manquants', 'Missing movies search')],
   },
   sonarr: {
-    key: 'sonarr:series', path: '/series', noun: 'séries',
-    filters: [['all', 'Toutes'], ['monitored', 'Surveillées'], ['missing', 'Épisodes manquants'], ['continuing', 'En cours'], ['ended', 'Terminées'], ['unmonitored', 'Non surveillées']],
+    key: 'sonarr:series', path: '/series',
+    noun: () => L('séries', 'series'),
+    filters: () => [['all', L('Toutes', 'All')], ['monitored', L('Surveillées', 'Monitored')], ['missing', L('Épisodes manquants', 'Missing episodes')], ['continuing', L('En cours', 'Continuing')], ['ended', L('Terminées', 'Ended')], ['unmonitored', L('Non surveillées', 'Unmonitored')]],
     filter: (s, f) => {
       const st = s.statistics || {};
       return f === 'monitored' ? s.monitored : f === 'missing' ? (st.episodeFileCount || 0) < (st.episodeCount || 0)
         : f === 'continuing' ? s.status === 'continuing' : f === 'ended' ? s.status === 'ended' : f === 'unmonitored' ? !s.monitored : true;
     },
-    sub: s => { const st = s.statistics || {}; return `${st.episodeFileCount || 0}/${st.episodeCount || 0} ép.`; },
+    sub: s => { const st = s.statistics || {}; return `${st.episodeFileCount || 0}/${st.episodeCount || 0} ${L('ép.', 'ep.')}`; },
     status: seriesStatus,
     progress: s => { const st = s.statistics || {}; return st.episodeCount ? Math.min(100, 100 * (st.episodeFileCount || 0) / st.episodeCount) : 0; },
     open: (id, t) => openSeries(id, t),
-    missingCmd: ['MissingEpisodeSearch', 'Recherche des épisodes manquants'],
+    missingCmd: () => ['MissingEpisodeSearch', L('Recherche des épisodes manquants', 'Missing episodes search')],
   },
 };
 
 async function libraryPage(box, svc) {
-  const L = LIB[svc];
+  const L_ = LIB[svc];
   const st = state.lib[svc] = state.lib[svc] || { q: '', filter: 'all', sort: 'title' };
   box.innerHTML = `<div class="toolbar">
-      <input class="input" type="search" id="q" placeholder="Filtrer les ${L.noun}…">
-      <div class="row"><select class="select" id="flt">${opts(L.filters, st.filter)}</select><select class="select" id="srt">${opts(SORTS, st.sort)}</select></div>
+      <input class="input" type="search" id="q" placeholder="${L(`Filtrer les ${L_.noun()}…`, `Filter ${L_.noun()}…`)}">
+      <div class="row"><select class="select" id="flt">${opts(L_.filters(), st.filter)}</select><select class="select" id="srt">${opts(SORTS(), st.sort)}</select></div>
       <div class="row between"><span class="muted small" id="count"></span><span id="extra"></span></div>
     </div>
     <div class="grid" id="grid"></div>
-    <button class="fab" id="fab" title="Ajouter">${icon('add')}</button>`;
+    <button class="fab" id="fab" title="${L('Ajouter', 'Add')}">${icon('add')}</button>`;
   const grid = $('#grid', box);
   $('#q', box).value = st.q;
-  let items = cache[L.key];
+  let items = cache[L_.key];
 
   const draw = () => {
     if (!items) return;
     const q = st.q.trim().toLowerCase();
-    let list = items.filter(x => L.filter(x, st.filter) && (!q || (x.title || '').toLowerCase().includes(q) || (x.originalTitle || '').toLowerCase().includes(q)));
+    let list = items.filter(x => L_.filter(x, st.filter) && (!q || (x.title || '').toLowerCase().includes(q) || (x.originalTitle || '').toLowerCase().includes(q)));
     const cmp = {
-      title: (a, b) => (a.sortTitle || a.title || '').localeCompare(b.sortTitle || b.title || '', 'fr'),
+      title: (a, b) => (a.sortTitle || a.title || '').localeCompare(b.sortTitle || b.title || '', LANG),
       added: (a, b) => new Date(b.added) - new Date(a.added),
       year: (a, b) => (b.year || 0) - (a.year || 0),
       rating: (a, b) => rating(b) - rating(a),
       size: (a, b) => sizeOf(b) - sizeOf(a),
     }[st.sort];
     list.sort(cmp);
-    $('#count', box).textContent = `${list.length} ${L.noun}` + (list.length !== items.length ? ` sur ${items.length}` : '');
+    $('#count', box).textContent = `${list.length} ${L_.noun()}` + (list.length !== items.length ? L(` sur ${items.length}`, ` of ${items.length}`) : '');
     const extra = $('#extra', box);
-    extra.innerHTML = st.filter === 'missing' && list.length ? `<button class="btn small" id="allmiss">${icon('search')} Tout rechercher</button>` : '';
-    if ($('#allmiss', box)) $('#allmiss', box).onclick = e => act(e.currentTarget, () => command(svc, L.missingCmd[0], {}, L.missingCmd[1]));
+    extra.innerHTML = st.filter === 'missing' && list.length ? `<button class="btn small" id="allmiss">${icon('search')} ${L('Tout rechercher', 'Search all')}</button>` : '';
+    if ($('#allmiss', box)) $('#allmiss', box).onclick = e => { const [c, l] = L_.missingCmd(); act(e.currentTarget, () => command(svc, c, {}, l)); };
     grid.innerHTML = list.length ? list.map(x => {
-      const [cls, label] = L.status(x);
-      const p = L.progress ? L.progress(x) : null;
+      const [cls, label] = L_.status(x);
+      const p = L_.progress ? L_.progress(x) : null;
       const extraHtml = `<span class="dot ${cls}"></span>${p !== null ? `<div class="pbar"><i class="${p >= 100 ? 'ok' : ''}" style="width:${p}%"></i></div>` : ''}`;
       return `<div class="card" data-id="${x.id}">${posterHtml(imgUrl(svc, x.images, 'poster'), x.title, extraHtml)}
-        <div class="ct">${esc(x.title)}</div><div class="cs">${esc(L.sub(x))} · <span class="st-${cls}">${esc(label)}</span></div></div>`;
-    }).join('') : `<div class="empty" style="grid-column:1/-1">Aucun résultat.</div>`;
+        <div class="ct">${esc(x.title)}</div><div class="cs">${esc(L_.sub(x))} · <span class="st-${cls}">${esc(label)}</span></div></div>`;
+    }).join('') : `<div class="empty" style="grid-column:1/-1">${L('Aucun résultat.', 'No results.')}</div>`;
   };
 
   $('#q', box).oninput = e => { st.q = e.target.value; draw(); };
@@ -456,19 +486,19 @@ async function libraryPage(box, svc) {
   $('#srt', box).onchange = e => { st.sort = e.target.value; draw(); };
   grid.onclick = e => {
     const c = e.target.closest('[data-id]');
-    if (c) L.open(+c.dataset.id, $('.ct', c).textContent);
+    if (c) L_.open(+c.dataset.id, $('.ct', c).textContent);
   };
   $('#fab', box).onclick = () => goTab(svc, 'add');
 
   if (items) { draw(); restoreScroll(box); }
   else grid.innerHTML = `<div style="grid-column:1/-1">${loading()}</div>`;
-  if (!items || Date.now() - cacheT[L.key] > 30000) {
+  if (!items || Date.now() - cacheT[L_.key] > 30000) {
     try {
-      items = await GET(svc, L.path);
-      setCache(L.key, items);
+      items = await GET(svc, L_.path);
+      setCache(L_.key, items);
       draw();
     } catch (e) {
-      if (!cache[L.key]) throw e;
+      if (!cache[L_.key]) throw e;
       toast(e.message, true);
     }
   }
@@ -477,20 +507,24 @@ async function libraryPage(box, svc) {
 /* =========================================================================
  * Movie detail (Radarr)
  * ========================================================================= */
-function openMovie(id, title) { push(title || 'Film', b => movieDetail(b, id)); }
+function openMovie(id, title) { push(title || L('Film', 'Movie'), b => movieDetail(b, id)); }
 
 function mediaRows(f) {
   const mi = f.mediaInfo || {};
   return [
-    ['Fichier', f.relativePath], ['Qualité', f.quality?.quality?.name], ['Taille', f.size ? fmtSize(f.size) : null],
-    ['Vidéo', [mi.resolution, mi.videoCodec, mi.videoDynamicRangeType].filter(Boolean).join(' · ')],
+    [L('Fichier', 'File'), f.relativePath], [L('Qualité', 'Quality'), f.quality?.quality?.name], [L('Taille', 'Size'), f.size ? fmtSize(f.size) : null],
+    [L('Vidéo', 'Video'), [mi.resolution, mi.videoCodec, mi.videoDynamicRangeType].filter(Boolean).join(' · ')],
     ['Audio', [mi.audioCodec, mi.audioChannels, mi.audioLanguages].filter(Boolean).join(' · ')],
-    ['Sous-titres', mi.subtitles], ['Langues', (f.languages || []).map(l => l.name).join(', ')],
-    ['Groupe', f.releaseGroup], ['Score formats', f.customFormatScore ? String(f.customFormatScore) : null],
-    ['Ajouté le', f.dateAdded && fmtDate(f.dateAdded, true)],
+    [L('Sous-titres', 'Subtitles'), mi.subtitles], [L('Langues', 'Languages'), (f.languages || []).map(l => l.name).join(', ')],
+    [L('Groupe', 'Group'), f.releaseGroup], [L('Score formats', 'Format score'), f.customFormatScore ? String(f.customFormatScore) : null],
+    [L('Ajouté le', 'Added'), f.dateAdded && fmtDate(f.dateAdded, true)],
   ];
 }
 const abtn = (a, ic, label, cls = '') => `<button class="abtn ${cls}" data-a="${a}">${icon(ic)}<span>${esc(label)}</span></button>`;
+const deleteChecks = () => [
+  { k: 'files', label: L('Supprimer aussi les fichiers du disque', 'Also delete files from disk'), on: false },
+  { k: 'excl', label: L("Ajouter à la liste d'exclusion d'import", 'Add to import exclusion list'), on: false },
+];
 
 async function movieDetail(box, id) {
   box.innerHTML = loading();
@@ -503,61 +537,60 @@ async function movieDetail(box, id) {
   box.innerHTML = `${hero('radarr', m, [m.year, fmtRuntime(m.runtime), m.certification].filter(Boolean).join(' · '),
       `<span class="badge ${cls}">${label}</span>${rat.map(r => `<span class="badge">${r}</span>`).join('')}`)}
     <div class="actions">
-      ${abtn('search', 'search', 'Rechercher')}${abtn('interactive', 'list', 'Manuelle')}
-      ${abtn('monitor', m.monitored ? 'bookmark' : 'bookmark_o', m.monitored ? 'Surveillé' : 'Non surveillé', m.monitored ? 'on' : '')}
-      ${abtn('edit', 'edit', 'Modifier')}${abtn('refresh', 'refresh', 'Actualiser')}${abtn('delete', 'delete', 'Supprimer', 'danger')}
+      ${abtn('search', 'search', L('Rechercher', 'Search'))}${abtn('interactive', 'list', L('Manuelle', 'Interactive'))}
+      ${abtn('monitor', m.monitored ? 'bookmark' : 'bookmark_o', m.monitored ? L('Surveillé', 'Monitored') : L('Non surveillé', 'Unmonitored'), m.monitored ? 'on' : '')}
+      ${abtn('edit', 'edit', L('Modifier', 'Edit'))}${abtn('refresh', 'refresh', L('Actualiser', 'Refresh'))}${abtn('delete', 'delete', L('Supprimer', 'Delete'), 'danger')}
     </div>
     ${m.overview ? `<p class="overview">${esc(m.overview)}</p>` : ''}
-    <div class="section"><h3>Informations</h3>${kv([
-      ['Profil qualité', prof?.name], ['Disponibilité min.', AVAIL[m.minimumAvailability] || m.minimumAvailability],
-      ['Statut', MSTATUS[m.status] || m.status], ['Titre original', m.originalTitle !== m.title ? m.originalTitle : null],
+    <div class="section"><h3>${L('Informations', 'Details')}</h3>${kv([
+      [L('Profil qualité', 'Quality profile'), prof?.name], [L('Disponibilité min.', 'Min. availability'), AVAIL()[m.minimumAvailability] || m.minimumAvailability],
+      [L('Statut', 'Status'), MSTATUS()[m.status] || m.status], [L('Titre original', 'Original title'), m.originalTitle !== m.title ? m.originalTitle : null],
       ['Studio', m.studio], ['Genres', (m.genres || []).join(', ')],
-      ['Au cinéma', m.inCinemas && fmtDate(m.inCinemas)], ['Sortie numérique', m.digitalRelease && fmtDate(m.digitalRelease)],
-      ['Sortie physique', m.physicalRelease && fmtDate(m.physicalRelease)], ['Chemin', m.path],
-      ['Taille', m.sizeOnDisk ? fmtSize(m.sizeOnDisk) : null], ['Ajouté le', fmtDate(m.added)],
+      [L('Au cinéma', 'In cinemas'), m.inCinemas && fmtDate(m.inCinemas)], [L('Sortie numérique', 'Digital release'), m.digitalRelease && fmtDate(m.digitalRelease)],
+      [L('Sortie physique', 'Physical release'), m.physicalRelease && fmtDate(m.physicalRelease)], [L('Chemin', 'Path'), m.path],
+      [L('Taille', 'Size'), m.sizeOnDisk ? fmtSize(m.sizeOnDisk) : null], [L('Ajouté le', 'Added'), fmtDate(m.added)],
     ])}</div>
-    ${f ? `<div class="section"><h3>Fichier</h3>${kv(mediaRows(f))}<div class="row" style="margin-top:12px"><button class="btn danger small" id="delfile">${icon('delete')} Supprimer le fichier</button></div></div>` : ''}
-    <div class="section"><h3>Historique</h3><div id="hist">${loading()}</div></div>`;
+    ${f ? `<div class="section"><h3>${L('Fichier', 'File')}</h3>${kv(mediaRows(f))}<div class="row" style="margin-top:12px"><button class="btn danger small" id="delfile">${icon('delete')} ${L('Supprimer le fichier', 'Delete file')}</button></div></div>` : ''}
+    <div class="section"><h3>${L('Historique', 'History')}</h3><div id="hist">${loading()}</div></div>`;
 
   $('.actions', box).onclick = e => {
     const b = e.target.closest('[data-a]');
     if (!b) return;
     const a = b.dataset.a;
-    if (a === 'search') act(b, () => command('radarr', 'MoviesSearch', { movieIds: [id] }, 'Recherche'));
+    if (a === 'search') act(b, () => command('radarr', 'MoviesSearch', { movieIds: [id] }, L('Recherche', 'Search')));
     else if (a === 'interactive') openReleases('radarr', 'movieId=' + id, m.title);
     else if (a === 'monitor') act(b, async () => {
       await PUT('radarr', '/movie/' + id, { ...m, monitored: !m.monitored });
-      dropCache('radarr:movies'); toast(m.monitored ? 'Film non surveillé' : 'Film surveillé'); render();
+      dropCache('radarr:movies'); toast(m.monitored ? L('Film non surveillé', 'Movie unmonitored') : L('Film surveillé', 'Movie monitored')); render();
     });
-    else if (a === 'refresh') act(b, () => command('radarr', 'RefreshMovie', { movieIds: [id] }, 'Actualisation'));
-    else if (a === 'edit') formSheet('Modifier le film', `
-        ${field('Profil de qualité', `<select class="select" id="prof">${opts(profiles.map(p => [p.id, p.name]), m.qualityProfileId)}</select>`)}
-        ${field('Disponibilité minimale', `<select class="select" id="avail">${opts(Object.entries(AVAIL), m.minimumAvailability)}</select>`)}
-        ${field('Chemin', `<input class="input" id="path" value="${esc(m.path)}">`)}
-        ${chk('mon', 'Surveillé', m.monitored)}
-        ${chk('move', 'Déplacer les fichiers si le chemin change', true)}`, 'Enregistrer', async sh => {
+    else if (a === 'refresh') act(b, () => command('radarr', 'RefreshMovie', { movieIds: [id] }, L('Actualisation', 'Refresh')));
+    else if (a === 'edit') formSheet(L('Modifier le film', 'Edit movie'), `
+        ${field(L('Profil de qualité', 'Quality profile'), `<select class="select" id="prof">${opts(profiles.map(p => [p.id, p.name]), m.qualityProfileId)}</select>`)}
+        ${field(L('Disponibilité minimale', 'Minimum availability'), `<select class="select" id="avail">${opts(Object.entries(AVAIL()), m.minimumAvailability)}</select>`)}
+        ${field(L('Chemin', 'Path'), `<input class="input" id="path" value="${esc(m.path)}">`)}
+        ${chk('mon', L('Surveillé', 'Monitored'), m.monitored)}
+        ${chk('move', L('Déplacer les fichiers si le chemin change', 'Move files if the path changes'), true)}`, L('Enregistrer', 'Save'), async sh => {
         const path = $('#path', sh).value.trim();
         await PUT('radarr', `/movie/${id}?moveFiles=${$('#move', sh).checked && path !== m.path}`, {
           ...m, qualityProfileId: +$('#prof', sh).value, minimumAvailability: $('#avail', sh).value,
           monitored: $('#mon', sh).checked, path,
         });
-        dropCache('radarr:movies'); toast('Film mis à jour'); render();
+        dropCache('radarr:movies'); toast(L('Film mis à jour', 'Movie updated')); render();
       });
     else if (a === 'delete') confirmSheet({
-      title: `Supprimer « ${m.title} » ?`, ok: 'Supprimer', danger: true,
-      checks: [{ k: 'files', label: 'Supprimer aussi les fichiers du disque', on: false }, { k: 'excl', label: "Ajouter à la liste d'exclusion d'import", on: false }],
+      title: L(`Supprimer « ${m.title} » ?`, `Delete "${m.title}"?`), ok: L('Supprimer', 'Delete'), danger: true, checks: deleteChecks(),
     }).then(v => v && act(null, async () => {
       await DEL('radarr', `/movie/${id}?deleteFiles=${v.files}&addImportExclusion=${v.excl}`);
-      dropCache('radarr:movies'); toast('Film supprimé'); pop();
+      dropCache('radarr:movies'); toast(L('Film supprimé', 'Movie deleted')); pop();
     }));
   };
-  if (f) $('#delfile', box).onclick = e => confirmSheet({ title: 'Supprimer le fichier ?', msg: f.relativePath, ok: 'Supprimer', danger: true })
-    .then(v => v && act(e.target, async () => { await DEL('radarr', '/moviefile/' + f.id); dropCache('radarr:movies'); toast('Fichier supprimé'); render(); }));
+  if (f) $('#delfile', box).onclick = e => confirmSheet({ title: L('Supprimer le fichier ?', 'Delete file?'), msg: f.relativePath, ok: L('Supprimer', 'Delete'), danger: true })
+    .then(v => v && act(e.target, async () => { await DEL('radarr', '/moviefile/' + f.id); dropCache('radarr:movies'); toast(L('Fichier supprimé', 'File deleted')); render(); }));
 
   try {
     const h = await GET('radarr', '/history/movie?movieId=' + id);
     const arr = (Array.isArray(h) ? h : h.records || []).sort((a, b) => new Date(b.date) - new Date(a.date));
-    $('#hist', box).innerHTML = arr.length ? arr.slice(0, 30).map(x => historyRow('radarr', x, true)).join('') : '<div class="muted small">Aucun historique.</div>';
+    $('#hist', box).innerHTML = arr.length ? arr.slice(0, 30).map(x => historyRow('radarr', x, true)).join('') : `<div class="muted small">${L('Aucun historique.', 'No history.')}</div>`;
   } catch (e) { $('#hist', box).innerHTML = `<div class="muted small">${esc(e.message)}</div>`; }
 }
 
@@ -572,8 +605,9 @@ function hero(svc, x, sub, badges) {
 /* =========================================================================
  * Series detail (Sonarr)
  * ========================================================================= */
-function openSeries(id, title) { push(title || 'Série', b => seriesDetail(b, id)); }
+function openSeries(id, title) { push(title || L('Série', 'Series'), b => seriesDetail(b, id)); }
 const openSeasons = {};
+const seasonName = n => n ? L('Saison ', 'Season ') + n : L('Épisodes spéciaux', 'Specials');
 
 async function seriesDetail(box, id) {
   box.innerHTML = loading();
@@ -598,9 +632,9 @@ async function seriesDetail(box, id) {
   const epHtml = e => {
     const f = fmap[e.episodeFileId];
     const aired = e.airDateUtc && new Date(e.airDateUtc) < now;
-    const stat = e.hasFile ? `<span class="st-ok">${esc(f?.quality?.quality?.name || 'Téléchargé')}${f ? ' · ' + fmtSize(f.size) : ''}</span>`
-      : aired ? `<span class="st-${e.monitored ? 'bad' : 'off'}">${e.monitored ? 'Manquant' : 'Non surveillé'}</span>`
-        : `<span class="st-soon">${e.airDateUtc ? 'À venir' : 'Date inconnue'}</span>`;
+    const stat = e.hasFile ? `<span class="st-ok">${esc(f?.quality?.quality?.name || L('Téléchargé', 'Downloaded'))}${f ? ' · ' + fmtSize(f.size) : ''}</span>`
+      : aired ? `<span class="st-${e.monitored ? 'bad' : 'off'}">${e.monitored ? L('Manquant', 'Missing') : L('Non surveillé', 'Unmonitored')}</span>`
+        : `<span class="st-soon">${e.airDateUtc ? L('À venir', 'Upcoming') : L('Date inconnue', 'Unknown date')}</span>`;
     return `<div class="ep" data-eid="${e.id}">
       <button class="icon-btn mon ${e.monitored ? 'on' : ''}" data-a="emon">${icon(e.monitored ? 'bookmark' : 'bookmark_o')}</button>
       <div class="grow" data-a="einfo"><div class="small"><b>${e.episodeNumber}.</b> ${esc(e.title || 'TBA')}</div>
@@ -616,31 +650,31 @@ async function seriesDetail(box, id) {
     return `<div class="season ${open.has(se.seasonNumber) ? 'open' : ''}" data-sn="${se.seasonNumber}">
       <div class="season-head">
         <button class="icon-btn mon ${se.monitored ? 'on' : ''}" data-a="smon">${icon(se.monitored ? 'bookmark' : 'bookmark_o')}</button>
-        <div class="grow" data-a="toggle"><div class="b">${se.seasonNumber ? 'Saison ' + se.seasonNumber : 'Épisodes spéciaux'}</div>
-          <div class="muted xs">${have}/${sEps.length} épisodes${ss.sizeOnDisk ? ' · ' + fmtSize(ss.sizeOnDisk) : ''}</div>
+        <div class="grow" data-a="toggle"><div class="b">${seasonName(se.seasonNumber)}</div>
+          <div class="muted xs">${have}/${sEps.length} ${L('épisodes', 'episodes')}${ss.sizeOnDisk ? ' · ' + fmtSize(ss.sizeOnDisk) : ''}</div>
           <div class="pbar"><i class="${pct >= 100 ? 'ok' : ''}" style="width:${pct}%"></i></div></div>
         <button class="icon-btn" data-a="ssearch">${icon('search')}</button>
         <button class="icon-btn" data-a="sint">${icon('list')}</button>
         <button class="icon-btn chev" data-a="toggle">${icon('expand')}</button>
-      </div><div class="eps">${sEps.map(epHtml).join('') || '<div class="muted small" style="padding:6px">Aucun épisode.</div>'}</div></div>`;
+      </div><div class="eps">${sEps.map(epHtml).join('') || `<div class="muted small" style="padding:6px">${L('Aucun épisode.', 'No episodes.')}</div>`}</div></div>`;
   };
 
   box.innerHTML = `${hero('sonarr', s, [s.year, s.network, s.runtime ? s.runtime + ' min' : '', s.certification].filter(Boolean).join(' · '),
-      `<span class="badge ${cls}">${label}</span><span class="badge">${esc(SSTATUS[s.status] || s.status)}</span>${s.ratings?.value ? `<span class="badge">★ ${s.ratings.value.toFixed(1)}</span>` : ''}`)}
+      `<span class="badge ${cls}">${label}</span><span class="badge">${esc(SSTATUS()[s.status] || s.status)}</span>${s.ratings?.value ? `<span class="badge">★ ${s.ratings.value.toFixed(1)}</span>` : ''}`)}
     <div class="actions">
-      ${abtn('search', 'search', 'Tout rechercher')}
-      ${abtn('monitor', s.monitored ? 'bookmark' : 'bookmark_o', s.monitored ? 'Surveillée' : 'Non surveillée', s.monitored ? 'on' : '')}
-      ${abtn('edit', 'edit', 'Modifier')}${abtn('refresh', 'refresh', 'Actualiser')}${abtn('delete', 'delete', 'Supprimer', 'danger')}
+      ${abtn('search', 'search', L('Tout rechercher', 'Search all'))}
+      ${abtn('monitor', s.monitored ? 'bookmark' : 'bookmark_o', s.monitored ? L('Surveillée', 'Monitored') : L('Non surveillée', 'Unmonitored'), s.monitored ? 'on' : '')}
+      ${abtn('edit', 'edit', L('Modifier', 'Edit'))}${abtn('refresh', 'refresh', L('Actualiser', 'Refresh'))}${abtn('delete', 'delete', L('Supprimer', 'Delete'), 'danger')}
     </div>
     ${s.overview ? `<p class="overview">${esc(s.overview)}</p>` : ''}
-    <div class="section"><h3>Saisons</h3>${seasons.map(seasonHtml).join('') || '<div class="muted small">Aucune saison.</div>'}</div>
-    <div class="section"><h3>Informations</h3>${kv([
-      ['Profil qualité', prof?.name], ['Type', STYPE[s.seriesType] || s.seriesType], ['Statut', SSTATUS[s.status] || s.status],
-      ['Chaîne', s.network], ['Genres', (s.genres || []).join(', ')],
-      ['Épisodes', `${st.episodeFileCount || 0} / ${st.episodeCount || 0} (total ${st.totalEpisodeCount || 0})`],
-      ['Prochaine diffusion', s.nextAiring && fmtDate(s.nextAiring, true)], ['Dernière diffusion', s.previousAiring && fmtDate(s.previousAiring)],
-      ['Chemin', s.path], ['Taille', st.sizeOnDisk ? fmtSize(st.sizeOnDisk) : null],
-      ['Dossiers de saison', s.seasonFolder ? 'Oui' : 'Non'], ['Ajoutée le', fmtDate(s.added)],
+    <div class="section"><h3>${L('Saisons', 'Seasons')}</h3>${seasons.map(seasonHtml).join('') || `<div class="muted small">${L('Aucune saison.', 'No seasons.')}</div>`}</div>
+    <div class="section"><h3>${L('Informations', 'Details')}</h3>${kv([
+      [L('Profil qualité', 'Quality profile'), prof?.name], ['Type', STYPE()[s.seriesType] || s.seriesType], [L('Statut', 'Status'), SSTATUS()[s.status] || s.status],
+      [L('Chaîne', 'Network'), s.network], ['Genres', (s.genres || []).join(', ')],
+      [L('Épisodes', 'Episodes'), `${st.episodeFileCount || 0} / ${st.episodeCount || 0} (total ${st.totalEpisodeCount || 0})`],
+      [L('Prochaine diffusion', 'Next airing'), s.nextAiring && fmtDate(s.nextAiring, true)], [L('Dernière diffusion', 'Previous airing'), s.previousAiring && fmtDate(s.previousAiring)],
+      [L('Chemin', 'Path'), s.path], [L('Taille', 'Size'), st.sizeOnDisk ? fmtSize(st.sizeOnDisk) : null],
+      [L('Dossiers de saison', 'Season folders'), s.seasonFolder ? L('Oui', 'Yes') : L('Non', 'No')], [L('Ajoutée le', 'Added'), fmtDate(s.added)],
     ])}</div>`;
 
   box.onclick = e => {
@@ -656,45 +690,44 @@ async function seriesDetail(box, id) {
         seasonEl.classList.toggle('open');
         if (seasonEl.classList.contains('open')) open.add(sn); else open.delete(sn);
         break;
-      case 'search': act(b, () => command('sonarr', 'SeriesSearch', { seriesId: id }, 'Recherche de la série')); break;
-      case 'refresh': act(b, () => command('sonarr', 'RefreshSeries', { seriesId: id }, 'Actualisation')); break;
+      case 'search': act(b, () => command('sonarr', 'SeriesSearch', { seriesId: id }, L('Recherche de la série', 'Series search'))); break;
+      case 'refresh': act(b, () => command('sonarr', 'RefreshSeries', { seriesId: id }, L('Actualisation', 'Refresh'))); break;
       case 'monitor': act(b, async () => {
         await PUT('sonarr', '/series/' + id, { ...s, monitored: !s.monitored });
-        dropCache('sonarr:series'); toast(s.monitored ? 'Série non surveillée' : 'Série surveillée'); render();
+        dropCache('sonarr:series'); toast(s.monitored ? L('Série non surveillée', 'Series unmonitored') : L('Série surveillée', 'Series monitored')); render();
       }); break;
       case 'smon': act(b, async () => {
         const seasonsUpd = s.seasons.map(x => x.seasonNumber === sn ? { ...x, monitored: !x.monitored } : x);
         await PUT('sonarr', '/series/' + id, { ...s, seasons: seasonsUpd });
         dropCache('sonarr:series'); render();
       }); break;
-      case 'ssearch': act(b, () => command('sonarr', 'SeasonSearch', { seriesId: id, seasonNumber: sn }, `Recherche saison ${sn}`)); break;
-      case 'sint': openReleases('sonarr', `seriesId=${id}&seasonNumber=${sn}`, `${s.title} — Saison ${sn}`); break;
+      case 'ssearch': act(b, () => command('sonarr', 'SeasonSearch', { seriesId: id, seasonNumber: sn }, L(`Recherche saison ${sn}`, `Season ${sn} search`))); break;
+      case 'sint': openReleases('sonarr', `seriesId=${id}&seasonNumber=${sn}`, `${s.title} — ${seasonName(sn)}`); break;
       case 'emon': act(b, async () => {
         await PUT('sonarr', '/episode/monitor', { episodeIds: [ep.id], monitored: !ep.monitored });
         render();
       }); break;
-      case 'esearch': act(b, () => command('sonarr', 'EpisodeSearch', { episodeIds: [ep.id] }, `Recherche ${epCode(ep)}`)); break;
+      case 'esearch': act(b, () => command('sonarr', 'EpisodeSearch', { episodeIds: [ep.id] }, L(`Recherche ${epCode(ep)}`, `${epCode(ep)} search`))); break;
       case 'eint': openReleases('sonarr', 'episodeId=' + ep.id, `${s.title} ${epCode(ep)}`); break;
       case 'einfo': episodeSheet(s, ep, fmap[ep.episodeFileId]); break;
-      case 'edit': formSheet('Modifier la série', `
-          ${field('Profil de qualité', `<select class="select" id="prof">${opts(profiles.map(p => [p.id, p.name]), s.qualityProfileId)}</select>`)}
-          ${field('Type de série', `<select class="select" id="stype">${opts(Object.entries(STYPE), s.seriesType)}</select>`)}
-          ${field('Chemin', `<input class="input" id="path" value="${esc(s.path)}">`)}
-          ${chk('mon', 'Surveillée', s.monitored)}${chk('sf', 'Utiliser des dossiers de saison', s.seasonFolder)}
-          ${chk('move', 'Déplacer les fichiers si le chemin change', true)}`, 'Enregistrer', async sh => {
+      case 'edit': formSheet(L('Modifier la série', 'Edit series'), `
+          ${field(L('Profil de qualité', 'Quality profile'), `<select class="select" id="prof">${opts(profiles.map(p => [p.id, p.name]), s.qualityProfileId)}</select>`)}
+          ${field(L('Type de série', 'Series type'), `<select class="select" id="stype">${opts(Object.entries(STYPE()), s.seriesType)}</select>`)}
+          ${field(L('Chemin', 'Path'), `<input class="input" id="path" value="${esc(s.path)}">`)}
+          ${chk('mon', L('Surveillée', 'Monitored'), s.monitored)}${chk('sf', L('Utiliser des dossiers de saison', 'Use season folders'), s.seasonFolder)}
+          ${chk('move', L('Déplacer les fichiers si le chemin change', 'Move files if the path changes'), true)}`, L('Enregistrer', 'Save'), async sh => {
           const path = $('#path', sh).value.trim();
           await PUT('sonarr', `/series/${id}?moveFiles=${$('#move', sh).checked && path !== s.path}`, {
             ...s, qualityProfileId: +$('#prof', sh).value, seriesType: $('#stype', sh).value,
             monitored: $('#mon', sh).checked, seasonFolder: $('#sf', sh).checked, path,
           });
-          dropCache('sonarr:series'); toast('Série mise à jour'); render();
+          dropCache('sonarr:series'); toast(L('Série mise à jour', 'Series updated')); render();
         }); break;
       case 'delete': confirmSheet({
-        title: `Supprimer « ${s.title} » ?`, ok: 'Supprimer', danger: true,
-        checks: [{ k: 'files', label: 'Supprimer aussi les fichiers du disque', on: false }, { k: 'excl', label: "Ajouter à la liste d'exclusion d'import", on: false }],
+        title: L(`Supprimer « ${s.title} » ?`, `Delete "${s.title}"?`), ok: L('Supprimer', 'Delete'), danger: true, checks: deleteChecks(),
       }).then(v => v && act(null, async () => {
         await DEL('sonarr', `/series/${id}?deleteFiles=${v.files}&addImportListExclusion=${v.excl}`);
-        dropCache('sonarr:series'); toast('Série supprimée'); pop();
+        dropCache('sonarr:series'); toast(L('Série supprimée', 'Series deleted')); pop();
       })); break;
     }
   };
@@ -702,33 +735,33 @@ async function seriesDetail(box, id) {
 
 function episodeSheet(s, ep, f) {
   const sh = openSheet(`<h2>${esc(epCode(ep))} · ${esc(ep.title || 'TBA')}</h2>
-    <p class="muted small">${esc(s.title)} · ${ep.airDateUtc ? fmtDate(ep.airDateUtc, true) : 'Date inconnue'}</p>
+    <p class="muted small">${esc(s.title)} · ${ep.airDateUtc ? fmtDate(ep.airDateUtc, true) : L('Date inconnue', 'Unknown date')}</p>
     ${ep.overview ? `<p class="small" style="line-height:1.5">${esc(ep.overview)}</p>` : ''}
     ${f ? `<div class="section" style="margin:12px 0">${kv(mediaRows(f))}</div>` : ''}
     <div class="btn-col">
-      <button class="btn primary" id="es">${icon('search')} Recherche automatique</button>
-      <button class="btn" id="ei">${icon('list')} Recherche manuelle</button>
-      ${f ? `<button class="btn danger" id="ed">${icon('delete')} Supprimer le fichier</button>` : ''}
+      <button class="btn primary" id="es">${icon('search')} ${L('Recherche automatique', 'Automatic search')}</button>
+      <button class="btn" id="ei">${icon('list')} ${L('Recherche manuelle', 'Interactive search')}</button>
+      ${f ? `<button class="btn danger" id="ed">${icon('delete')} ${L('Supprimer le fichier', 'Delete file')}</button>` : ''}
     </div>`);
-  $('#es', sh).onclick = e => act(e.currentTarget, async () => { await command('sonarr', 'EpisodeSearch', { episodeIds: [ep.id] }, `Recherche ${epCode(ep)}`); closeSheet(); });
+  $('#es', sh).onclick = e => act(e.currentTarget, async () => { await command('sonarr', 'EpisodeSearch', { episodeIds: [ep.id] }, L(`Recherche ${epCode(ep)}`, `${epCode(ep)} search`)); closeSheet(); });
   $('#ei', sh).onclick = () => { closeSheet(); openReleases('sonarr', 'episodeId=' + ep.id, `${s.title} ${epCode(ep)}`); };
-  if (f) $('#ed', sh).onclick = () => confirmSheet({ title: 'Supprimer le fichier ?', msg: f.relativePath, ok: 'Supprimer', danger: true })
-    .then(v => v && act(null, async () => { await DEL('sonarr', '/episodefile/' + f.id); dropCache('sonarr:series'); toast('Fichier supprimé'); render(); }));
+  if (f) $('#ed', sh).onclick = () => confirmSheet({ title: L('Supprimer le fichier ?', 'Delete file?'), msg: f.relativePath, ok: L('Supprimer', 'Delete'), danger: true })
+    .then(v => v && act(null, async () => { await DEL('sonarr', '/episodefile/' + f.id); dropCache('sonarr:series'); toast(L('Fichier supprimé', 'File deleted')); render(); }));
 }
 
 /* =========================================================================
  * Interactive search (releases) — Radarr & Sonarr
  * ========================================================================= */
-function openReleases(svc, query, title) { push('Recherche manuelle', b => releasesPage(b, svc, query, title)); }
+function openReleases(svc, query, title) { push(L('Recherche manuelle', 'Interactive search'), b => releasesPage(b, svc, query, title)); }
 
 async function releasesPage(box, svc, query, title) {
-  box.innerHTML = `<div class="toolbar"><div class="b">${esc(title)}</div></div>${loading('Interrogation des indexeurs… cela peut prendre jusqu\'à une minute.')}`;
+  box.innerHTML = `<div class="toolbar"><div class="b">${esc(title)}</div></div>${loading(L("Interrogation des indexeurs… cela peut prendre jusqu'à une minute.", 'Querying indexers… this can take up to a minute.'))}`;
   const rels = await GET(svc, '/release?' + query);
   const st = { sort: 'default', hide: false, q: '' };
   box.innerHTML = `<div class="toolbar"><div class="b">${esc(title)}</div>
-      <input class="input" type="search" id="q" placeholder="Filtrer les résultats…">
-      <div class="row"><select class="select" id="srt">${opts([['default', 'Pertinence'], ['seeders', 'Seeders'], ['size_d', 'Taille ↓'], ['size_a', 'Taille ↑'], ['age', 'Plus récent'], ['score', 'Score formats']], st.sort)}</select></div>
-      <div class="row between">${chk('hide', 'Masquer les rejetés', st.hide)}<span class="muted small" id="cnt"></span></div></div>
+      <input class="input" type="search" id="q" placeholder="${L('Filtrer les résultats…', 'Filter results…')}">
+      <div class="row"><select class="select" id="srt">${opts([['default', L('Pertinence', 'Relevance')], ['seeders', 'Seeders'], ['size_d', L('Taille ↓', 'Size ↓')], ['size_a', L('Taille ↑', 'Size ↑')], ['age', L('Plus récent', 'Newest')], ['score', L('Score formats', 'Format score')]], st.sort)}</select></div>
+      <div class="row between">${chk('hide', L('Masquer les rejetés', 'Hide rejected'), st.hide)}<span class="muted small" id="cnt"></span></div></div>
     <div id="rels"></div>`;
   const list = $('#rels', box);
   const draw = () => {
@@ -741,7 +774,7 @@ async function releasesPage(box, svc, query, title) {
       score: (a, b) => (b.r.customFormatScore || 0) - (a.r.customFormatScore || 0),
     }[st.sort];
     if (cmp) arr.sort(cmp);
-    $('#cnt', box).textContent = `${arr.length} résultat(s)`;
+    $('#cnt', box).textContent = plural(arr.length, 'résultat', 'result');
     list.innerHTML = arr.length ? arr.map(({ r, i }) => `<div class="rel ${r.rejected ? 'rejected' : ''}">
         <div class="rel-title">${esc(r.title)}</div>
         <div class="chips">
@@ -752,12 +785,12 @@ async function releasesPage(box, svc, query, title) {
           <span class="chip">${esc(r.indexer)}</span>
           ${(r.languages || []).map(l => `<span class="chip">${esc(l.name)}</span>`).join('')}
           ${r.customFormatScore ? `<span class="chip ${r.customFormatScore > 0 ? 'ok' : 'bad'}">CF ${r.customFormatScore > 0 ? '+' : ''}${r.customFormatScore}</span>` : ''}
-          ${svc === 'sonarr' && r.fullSeason ? '<span class="chip warn">Saison complète</span>' : ''}
+          ${svc === 'sonarr' && r.fullSeason ? `<span class="chip warn">${L('Saison complète', 'Full season')}</span>` : ''}
         </div>
         ${r.rejected ? `<div class="rej">${(r.rejections || []).map(x => '• ' + esc(rejText(x))).join('<br>')}</div>` : ''}
-        <div class="row">${r.infoUrl ? `<button class="btn small ghost" data-info="${i}">${icon('open')} Infos</button>` : ''}
-          <button class="btn small primary" data-dl="${i}">${icon('download')} Télécharger</button></div>
-      </div>`).join('') : '<div class="empty">Aucun résultat trouvé par les indexeurs.</div>';
+        <div class="row">${r.infoUrl ? `<button class="btn small ghost" data-info="${i}">${icon('open')} Info</button>` : ''}
+          <button class="btn small primary" data-dl="${i}">${icon('download')} ${L('Télécharger', 'Download')}</button></div>
+      </div>`).join('') : `<div class="empty">${L('Aucun résultat trouvé par les indexeurs.', 'No results found by the indexers.')}</div>`;
   };
   $('#q', box).oninput = e => { st.q = e.target.value; draw(); };
   $('#srt', box).onchange = e => { st.sort = e.target.value; draw(); };
@@ -769,13 +802,17 @@ async function releasesPage(box, svc, query, title) {
     if (!b) return;
     const r = rels[+b.dataset.dl];
     if (r.rejected) {
-      const ok = await confirmSheet({ title: 'Release rejetée', msg: (r.rejections || []).map(rejText).join('\n') + '\n\nTélécharger quand même ?', ok: 'Télécharger' });
+      const ok = await confirmSheet({
+        title: L('Release rejetée', 'Rejected release'),
+        msg: (r.rejections || []).map(rejText).join('\n') + L('\n\nTélécharger quand même ?', '\n\nDownload anyway?'),
+        ok: L('Télécharger', 'Download'),
+      });
       if (!ok) return;
     }
     act(b, async () => {
       await POST(svc, '/release', { guid: r.guid, indexerId: r.indexerId });
-      b.classList.remove('primary'); b.classList.add('done'); b.innerHTML = `${icon('check')} Envoyé`;
-      toast('Envoyé au client de téléchargement ✓');
+      b.classList.remove('primary'); b.classList.add('done'); b.innerHTML = `${icon('check')} ${L('Envoyé', 'Sent')}`;
+      toast(L('Envoyé au client de téléchargement ✓', 'Sent to download client ✓'));
     });
   };
   draw();
@@ -788,21 +825,24 @@ async function addPage(box, svc) {
   const st = state.add[svc] = state.add[svc] || { q: '', results: null };
   const isR = svc === 'radarr';
   box.innerHTML = `<div class="toolbar"><form class="searchbar" id="f">
-      <input class="input" type="search" id="q" placeholder="${isR ? 'Titre du film, imdb:tt…, tmdb:…' : 'Nom de la série, tvdb:…'}" enterkeyhint="search">
+      <input class="input" type="search" id="q" placeholder="${isR ? L('Titre du film, imdb:tt…, tmdb:…', 'Movie title, imdb:tt…, tmdb:…') : L('Nom de la série, tvdb:…', 'Series name, tvdb:…')}" enterkeyhint="search">
       <button class="btn primary" type="submit">${icon('search')}</button></form></div>
     <div id="res" class="list"></div>`;
   const res = $('#res', box);
   $('#q', box).value = st.q;
   const draw = () => {
-    if (!st.results) { res.innerHTML = `<div class="empty">Recherche ${isR ? 'un film' : 'une série'} à ajouter à ${SERVICES[svc].name}.</div>`; return; }
+    if (!st.results) {
+      res.innerHTML = `<div class="empty">${isR ? L(`Recherche un film à ajouter à Radarr.`, 'Search for a movie to add to Radarr.') : L('Recherche une série à ajouter à Sonarr.', 'Search for a series to add to Sonarr.')}</div>`;
+      return;
+    }
     res.innerHTML = st.results.length ? st.results.map((x, i) => `<div class="li click" data-i="${i}">
         ${thumbHtml(imgUrl(svc, x.images, 'poster'))}
         <div class="grow"><div class="b">${esc(x.title)} ${x.year ? `<span class="muted">(${x.year})</span>` : ''}</div>
-          <div class="chips">${x.id ? '<span class="chip ok">✓ Déjà dans la bibliothèque</span>' : ''}
-            ${isR ? (x.runtime ? `<span class="chip">${fmtRuntime(x.runtime)}</span>` : '') : `<span class="chip">${x.seasonCount || x.seasons?.length || 0} saison(s)</span>${x.network ? `<span class="chip">${esc(x.network)}</span>` : ''}`}
-            ${x.status ? `<span class="chip">${esc((isR ? MSTATUS : SSTATUS)[x.status] || x.status)}</span>` : ''}</div>
+          <div class="chips">${x.id ? `<span class="chip ok">✓ ${L('Déjà dans la bibliothèque', 'Already in library')}</span>` : ''}
+            ${isR ? (x.runtime ? `<span class="chip">${fmtRuntime(x.runtime)}</span>` : '') : `<span class="chip">${plural(x.seasonCount || x.seasons?.length || 0, 'saison', 'season')}</span>${x.network ? `<span class="chip">${esc(x.network)}</span>` : ''}`}
+            ${x.status ? `<span class="chip">${esc((isR ? MSTATUS() : SSTATUS())[x.status] || x.status)}</span>` : ''}</div>
           <div class="muted xs" style="margin-top:6px;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden">${esc(x.overview || '')}</div></div></div>`).join('')
-      : '<div class="empty">Aucun résultat.</div>';
+      : `<div class="empty">${L('Aucun résultat.', 'No results.')}</div>`;
   };
   $('#f', box).onsubmit = async e => {
     e.preventDefault();
@@ -826,16 +866,19 @@ async function addPage(box, svc) {
   draw();
 }
 
+const rootOpts = roots => roots.map(r => [r.path, `${r.path} — ${fmtSize(r.freeSpace)} ${L('libres', 'free')}`]);
+const noRoot = svc => new Error(L(`Aucun dossier racine configuré dans ${svc} (Settings › Media Management).`, `No root folder configured in ${svc} (Settings › Media Management).`));
+
 async function addMovieSheet(m) {
   const [profiles, roots] = await Promise.all([profilesOf('radarr'), rootsOf('radarr')]);
-  if (!roots.length) throw new Error('Aucun dossier racine configuré dans Radarr (Settings › Media Management).');
+  if (!roots.length) throw noRoot('Radarr');
   const p = cfg.prefs.radarr || {};
   formSheet(`${m.title}${m.year ? ` (${m.year})` : ''}`, `
-    ${field('Dossier racine', `<select class="select" id="root">${opts(roots.map(r => [r.path, `${r.path} — ${fmtSize(r.freeSpace)} libres`]), p.root)}</select>`)}
-    ${field('Profil de qualité', `<select class="select" id="prof">${opts(profiles.map(x => [x.id, x.name]), p.profile)}</select>`)}
-    ${field('Disponibilité minimale', `<select class="select" id="avail">${opts(Object.entries(AVAIL), p.avail || 'released')}</select>`)}
-    ${chk('mon', 'Surveiller le film', true)}
-    ${chk('search', 'Lancer la recherche immédiatement', p.search !== false)}`, 'Ajouter le film', async sh => {
+    ${field(L('Dossier racine', 'Root folder'), `<select class="select" id="root">${opts(rootOpts(roots), p.root)}</select>`)}
+    ${field(L('Profil de qualité', 'Quality profile'), `<select class="select" id="prof">${opts(profiles.map(x => [x.id, x.name]), p.profile)}</select>`)}
+    ${field(L('Disponibilité minimale', 'Minimum availability'), `<select class="select" id="avail">${opts(Object.entries(AVAIL()), p.avail || 'released')}</select>`)}
+    ${chk('mon', L('Surveiller le film', 'Monitor movie'), true)}
+    ${chk('search', L('Lancer la recherche immédiatement', 'Start search now'), p.search !== false)}`, L('Ajouter le film', 'Add movie'), async sh => {
     const v = { root: $('#root', sh).value, profile: +$('#prof', sh).value, avail: $('#avail', sh).value, search: $('#search', sh).checked };
     const mon = $('#mon', sh).checked;
     cfg.prefs.radarr = v; saveCfg();
@@ -844,27 +887,27 @@ async function addMovieSheet(m) {
     delete body.id;
     const added = await POST('radarr', '/movie', body);
     dropCache('radarr:movies');
-    toast(`${m.title} ajouté${v.search && mon ? ' — recherche lancée' : ''} ✓`);
+    toast(L(`${m.title} ajouté`, `${m.title} added`) + (v.search && mon ? L(' — recherche lancée', ' — search started') : '') + ' ✓');
     openMovie(added.id, added.title);
   });
 }
 
 async function addSeriesSheet(s) {
   const [profiles, roots, status] = await Promise.all([profilesOf('sonarr'), rootsOf('sonarr'), cached('sonarr:status', () => GET('sonarr', '/system/status'))]);
-  if (!roots.length) throw new Error('Aucun dossier racine configuré dans Sonarr (Settings › Media Management).');
+  if (!roots.length) throw noRoot('Sonarr');
   let langs = null;
   if (String(status.version || '').startsWith('3.')) langs = await cached('sonarr:langprofiles', () => GET('sonarr', '/languageprofile')).catch(() => null);
   const p = cfg.prefs.sonarr || {};
-  const MON = [['all', 'Tous les épisodes'], ['future', 'Épisodes futurs'], ['missing', 'Épisodes manquants'], ['existing', 'Épisodes existants'],
-    ['firstSeason', 'Première saison'], ['latestSeason', 'Dernière saison'], ['pilot', 'Pilote'], ['none', 'Aucun']];
+  const MON = [['all', L('Tous les épisodes', 'All episodes')], ['future', L('Épisodes futurs', 'Future episodes')], ['missing', L('Épisodes manquants', 'Missing episodes')], ['existing', L('Épisodes existants', 'Existing episodes')],
+    ['firstSeason', L('Première saison', 'First season')], ['latestSeason', L('Dernière saison', 'Latest season')], ['pilot', L('Pilote', 'Pilot')], ['none', L('Aucun', 'None')]];
   formSheet(`${s.title}${s.year ? ` (${s.year})` : ''}`, `
-    ${field('Dossier racine', `<select class="select" id="root">${opts(roots.map(r => [r.path, `${r.path} — ${fmtSize(r.freeSpace)} libres`]), p.root)}</select>`)}
-    ${field('Épisodes à surveiller', `<select class="select" id="mon">${opts(MON, p.monitor || 'all')}</select>`)}
-    ${field('Profil de qualité', `<select class="select" id="prof">${opts(profiles.map(x => [x.id, x.name]), p.profile)}</select>`)}
-    ${langs ? field('Profil de langue', `<select class="select" id="lang">${opts(langs.map(x => [x.id, x.name]), p.lang)}</select>`) : ''}
-    ${field('Type de série', `<select class="select" id="stype">${opts(Object.entries(STYPE), s.seriesType || 'standard')}</select>`)}
-    ${chk('sf', 'Utiliser des dossiers de saison', p.seasonFolder !== false)}
-    ${chk('search', 'Rechercher les épisodes manquants', p.search !== false)}`, 'Ajouter la série', async sh => {
+    ${field(L('Dossier racine', 'Root folder'), `<select class="select" id="root">${opts(rootOpts(roots), p.root)}</select>`)}
+    ${field(L('Épisodes à surveiller', 'Monitor'), `<select class="select" id="mon">${opts(MON, p.monitor || 'all')}</select>`)}
+    ${field(L('Profil de qualité', 'Quality profile'), `<select class="select" id="prof">${opts(profiles.map(x => [x.id, x.name]), p.profile)}</select>`)}
+    ${langs ? field(L('Profil de langue', 'Language profile'), `<select class="select" id="lang">${opts(langs.map(x => [x.id, x.name]), p.lang)}</select>`) : ''}
+    ${field(L('Type de série', 'Series type'), `<select class="select" id="stype">${opts(Object.entries(STYPE()), s.seriesType || 'standard')}</select>`)}
+    ${chk('sf', L('Utiliser des dossiers de saison', 'Use season folders'), p.seasonFolder !== false)}
+    ${chk('search', L('Rechercher les épisodes manquants', 'Search for missing episodes'), p.search !== false)}`, L('Ajouter la série', 'Add series'), async sh => {
     const v = { root: $('#root', sh).value, profile: +$('#prof', sh).value, monitor: $('#mon', sh).value,
       seasonFolder: $('#sf', sh).checked, search: $('#search', sh).checked, lang: langs ? +$('#lang', sh).value : undefined };
     cfg.prefs.sonarr = v; saveCfg();
@@ -875,7 +918,7 @@ async function addSeriesSheet(s) {
     delete body.id;
     const added = await POST('sonarr', '/series', body);
     dropCache('sonarr:series');
-    toast(`${s.title} ajoutée${v.search ? ' — recherche lancée' : ''} ✓`);
+    toast(L(`${s.title} ajoutée`, `${s.title} added`) + (v.search ? L(' — recherche lancée', ' — search started') : '') + ' ✓');
     openSeries(added.id, added.title);
   });
 }
@@ -883,58 +926,59 @@ async function addSeriesSheet(s) {
 /* =========================================================================
  * Queue (activity)
  * ========================================================================= */
-const QSTAT = {
-  downloading: 'Téléchargement', paused: 'En pause', queued: 'En attente', completed: 'Terminé', delay: 'Différé',
-  downloadClientUnavailable: 'Client indisponible', warning: 'Avertissement', failed: 'Échec', fallback: 'Secours',
-  importPending: 'Import en attente', importing: 'Import en cours', imported: 'Importé', failedPending: 'Échec (en attente)',
-  importBlocked: 'Import bloqué', unknown: 'Inconnu',
-};
+const QSTAT = () => ({
+  downloading: L('Téléchargement', 'Downloading'), paused: L('En pause', 'Paused'), queued: L('En attente', 'Queued'), completed: L('Terminé', 'Completed'), delay: L('Différé', 'Delayed'),
+  downloadClientUnavailable: L('Client indisponible', 'Client unavailable'), warning: L('Avertissement', 'Warning'), failed: L('Échec', 'Failed'), fallback: 'Fallback',
+  importPending: L('Import en attente', 'Import pending'), importing: L('Import en cours', 'Importing'), imported: L('Importé', 'Imported'), failedPending: L('Échec (en attente)', 'Failed (pending)'),
+  importBlocked: L('Import bloqué', 'Import blocked'), unknown: L('Inconnu', 'Unknown'),
+});
 async function queuePage(box, svc) {
   box.innerHTML = `<div class="toolbar row between"><span class="muted small" id="cnt"></span>
-      <button class="btn small" id="refdl">${icon('refresh')} Rafraîchir les clients</button></div><div id="q">${loading()}</div>`;
+      <button class="btn small" id="refdl">${icon('refresh')} ${L('Rafraîchir les clients', 'Refresh clients')}</button></div><div id="q">${loading()}</div>`;
   const qbox = $('#q', box);
   let records = [];
-  $('#refdl', box).onclick = e => act(e.currentTarget, () => command(svc, 'RefreshMonitoredDownloads', {}, 'Rafraîchissement'));
+  $('#refdl', box).onclick = e => act(e.currentTarget, () => command(svc, 'RefreshMonitoredDownloads', {}, L('Rafraîchissement', 'Refresh')));
   const load = async () => {
     const inc = svc === 'radarr' ? 'includeMovie=true&includeUnknownMovieItems=true' : 'includeSeries=true&includeEpisode=true&includeUnknownSeriesItems=true';
     const d = await GET(svc, `/queue?page=1&pageSize=200&${inc}`);
     records = d.records || [];
     if (!box.isConnected) return;
-    $('#cnt', box).textContent = `${records.length} élément(s) en file`;
+    $('#cnt', box).textContent = L(`${records.length} élément(s) en file`, plural(records.length, '', 'item') + ' in queue');
+    const QS = QSTAT();
     qbox.innerHTML = records.length ? records.map((q, i) => {
       const pct = q.size ? Math.max(0, Math.min(100, 100 * (1 - q.sizeleft / q.size))) : 0;
       const name = svc === 'radarr' ? (q.movie?.title || q.title) : (q.series ? `${q.series.title} — ${epCode(q.episode)}` : q.title);
       const tState = q.trackedDownloadState;
-      const label = QSTAT[['importPending', 'importing', 'failedPending', 'importBlocked', 'imported'].includes(tState) ? tState : q.status] || q.status;
+      const label = QS[['importPending', 'importing', 'failedPending', 'importBlocked', 'imported'].includes(tState) ? tState : q.status] || q.status;
       const tcls = q.trackedDownloadStatus === 'error' || q.status === 'failed' ? 'bad' : q.trackedDownloadStatus === 'warning' ? 'warn' : q.status === 'completed' ? 'ok' : 'info';
       const msgs = (q.statusMessages || []).flatMap(m => m.messages || []).concat(q.errorMessage ? [q.errorMessage] : []);
       return `<div class="qi"><div class="row between" style="flex-wrap:nowrap"><div class="grow"><div class="b ellipsis">${esc(name)}</div>
           <div class="muted xs ellipsis">${esc(q.title)}</div></div><span class="badge ${tcls}">${esc(label)}</span></div>
         <div class="pbar big"><i class="${pct >= 100 ? 'ok' : ''}" style="width:${pct}%"></i></div>
-        <div class="row between xs muted" style="margin-top:6px"><span>${pct.toFixed(1).replace('.', ',')} % · ${fmtSize(q.size - q.sizeleft)} / ${fmtSize(q.size)}</span>
-          <span>${q.timeleft ? 'Reste ' + esc(q.timeleft) : ''}</span></div>
+        <div class="row between xs muted" style="margin-top:6px"><span>${dec(pct.toFixed(1))}${L(' %', '%')} ·${fmtSize(q.size - q.sizeleft)} / ${fmtSize(q.size)}</span>
+          <span>${q.timeleft ? L('Reste ', 'ETA ') + esc(q.timeleft) : ''}</span></div>
         <div class="chips"><span class="chip q">${esc(q.quality?.quality?.name || '?')}</span><span class="chip">${esc(q.protocol || '')}</span>
           ${q.downloadClient ? `<span class="chip">${esc(q.downloadClient)}</span>` : ''}${q.indexer ? `<span class="chip">${esc(q.indexer)}</span>` : ''}</div>
         ${msgs.length ? `<div class="msg">${msgs.map(m => '• ' + esc(m)).join('<br>')}</div>` : ''}
         <div class="row" style="justify-content:flex-end;margin-top:8px">
-          ${q.status === 'delay' ? `<button class="btn small" data-grab="${i}">${icon('bolt')} Forcer</button>` : ''}
-          <button class="btn small danger" data-rm="${i}">${icon('delete')} Retirer</button></div></div>`;
-    }).join('') : '<div class="empty">Aucun téléchargement en cours.</div>';
+          ${q.status === 'delay' ? `<button class="btn small" data-grab="${i}">${icon('bolt')} ${L('Forcer', 'Force')}</button>` : ''}
+          <button class="btn small danger" data-rm="${i}">${icon('delete')} ${L('Retirer', 'Remove')}</button></div></div>`;
+    }).join('') : `<div class="empty">${L('Aucun téléchargement en cours.', 'No active downloads.')}</div>`;
   };
   qbox.onclick = e => {
     const g = e.target.closest('[data-grab]');
-    if (g) return act(g, async () => { await POST(svc, '/queue/grab/' + records[+g.dataset.grab].id); toast('Téléchargement forcé ✓'); load(); });
+    if (g) return act(g, async () => { await POST(svc, '/queue/grab/' + records[+g.dataset.grab].id); toast(L('Téléchargement forcé ✓', 'Download forced ✓')); load(); });
     const b = e.target.closest('[data-rm]');
     if (!b) return;
     const q = records[+b.dataset.rm];
     confirmSheet({
-      title: 'Retirer de la file ?', msg: q.title, ok: 'Retirer', danger: true,
-      checks: [{ k: 'client', label: 'Supprimer aussi du client de téléchargement', on: true },
-        { k: 'block', label: 'Ajouter à la liste noire (ne plus télécharger cette release)', on: false },
-        { k: 'skip', label: 'Ne pas relancer de recherche automatique', on: false }],
+      title: L('Retirer de la file ?', 'Remove from queue?'), msg: q.title, ok: L('Retirer', 'Remove'), danger: true,
+      checks: [{ k: 'client', label: L('Supprimer aussi du client de téléchargement', 'Also remove from download client'), on: true },
+        { k: 'block', label: L('Ajouter à la liste noire (ne plus télécharger cette release)', 'Add release to blocklist'), on: false },
+        { k: 'skip', label: L('Ne pas relancer de recherche automatique', 'Skip automatic re-download search'), on: false }],
     }).then(v => v && act(null, async () => {
       await DEL(svc, `/queue/${q.id}?removeFromClient=${v.client}&blocklist=${v.block}&skipRedownload=${v.skip}`);
-      toast('Retiré de la file'); load();
+      toast(L('Retiré de la file', 'Removed from queue')); load();
     }));
   };
   await load();
@@ -951,42 +995,39 @@ async function calendarPage(box, svc) {
   const data = await GET(svc, `/calendar?start=${start.toISOString()}&end=${end.toISOString()}&unmonitored=true${svc === 'sonarr' ? '&includeSeries=true' : ''}`);
   const now = new Date();
   const entries = [];
+  const lbl = (hasFile, past, monitored) => hasFile ? ['ok', L('Téléchargé', 'Downloaded')]
+    : past ? (monitored ? ['bad', L('Manquant', 'Missing')] : ['off', L('Non surveillé', 'Unmonitored')]) : ['info', L('À venir', 'Upcoming')];
   if (svc === 'sonarr') {
     for (const ep of data) {
       if (!ep.airDateUtc) continue;
       const d = new Date(ep.airDateUtc);
-      const past = d < now;
-      entries.push({ d, time: true, title: ep.series?.title || '', sub: `${epCode(ep)} · ${ep.title || 'TBA'}`,
-        cls: ep.hasFile ? 'ok' : past ? (ep.monitored ? 'bad' : 'off') : 'info',
-        label: ep.hasFile ? 'Téléchargé' : past ? (ep.monitored ? 'Manquant' : 'Non surveillé') : 'À venir',
+      const [cls, label] = lbl(ep.hasFile, d < now, ep.monitored);
+      entries.push({ d, time: true, title: ep.series?.title || '', sub: `${epCode(ep)} · ${ep.title || 'TBA'}`, cls, label,
         img: imgUrl('sonarr', ep.series?.images, 'poster'), open: () => openSeries(ep.seriesId, ep.series?.title) });
     }
   } else {
     for (const m of data) {
-      for (const [k, lbl] of [['inCinemas', 'Sortie cinéma'], ['digitalRelease', 'Sortie numérique'], ['physicalRelease', 'Sortie physique']]) {
+      for (const [k, kl] of [['inCinemas', L('Sortie cinéma', 'Cinema release')], ['digitalRelease', L('Sortie numérique', 'Digital release')], ['physicalRelease', L('Sortie physique', 'Physical release')]]) {
         if (!m[k]) continue;
         const d = new Date(m[k]);
         if (d < start || d > end) continue;
-        const past = d < now;
-        entries.push({ d, title: m.title, sub: lbl,
-          cls: m.hasFile ? 'ok' : past ? (m.monitored ? 'bad' : 'off') : 'info',
-          label: m.hasFile ? 'Téléchargé' : past ? (m.monitored ? 'Manquant' : 'Non surveillé') : 'À venir',
-          img: imgUrl('radarr', m.images, 'poster'), open: () => openMovie(m.id, m.title) });
+        const [cls, label] = lbl(m.hasFile, d < now, m.monitored);
+        entries.push({ d, title: m.title, sub: kl, cls, label, img: imgUrl('radarr', m.images, 'poster'), open: () => openMovie(m.id, m.title) });
       }
     }
   }
   entries.sort((a, b) => a.d - b.d);
-  if (!entries.length) { box.innerHTML = '<div class="empty">Rien de prévu dans les 60 prochains jours.</div>'; return; }
+  if (!entries.length) { box.innerHTML = `<div class="empty">${L('Rien de prévu dans les 60 prochains jours.', 'Nothing scheduled in the next 60 days.')}</div>`; return; }
   const dayKey = d => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
   const todayK = dayKey(now);
   const tm = new Date(now); tm.setDate(tm.getDate() + 1);
   const ye = new Date(now); ye.setDate(ye.getDate() - 1);
   const dayLabel = d => {
     const k = dayKey(d);
-    if (k === todayK) return "Aujourd'hui";
-    if (k === dayKey(tm)) return 'Demain';
-    if (k === dayKey(ye)) return 'Hier';
-    return d.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
+    if (k === todayK) return L("Aujourd'hui", 'Today');
+    if (k === dayKey(tm)) return L('Demain', 'Tomorrow');
+    if (k === dayKey(ye)) return L('Hier', 'Yesterday');
+    return d.toLocaleDateString(LOC(), { weekday: 'long', day: 'numeric', month: 'long' });
   };
   let html = '', last = '';
   entries.forEach((x, i) => {
@@ -996,7 +1037,7 @@ async function calendarPage(box, svc) {
       last = k;
     }
     html += `<div class="li click" data-i="${i}">${thumbHtml(x.img)}<div class="grow"><div class="b">${esc(x.title)}</div>
-      <div class="small">${esc(x.sub)}</div><div class="xs muted">${x.time ? x.d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) + ' · ' : ''}<span class="st-${x.cls}">${x.label}</span></div></div></div>`;
+      <div class="small">${esc(x.sub)}</div><div class="xs muted">${x.time ? fmtTime(x.d) + ' · ' : ''}<span class="st-${x.cls}">${x.label}</span></div></div></div>`;
   });
   box.innerHTML = html;
   box.onclick = e => { const li = e.target.closest('[data-i]'); if (li) entries[+li.dataset.i].open(); };
@@ -1007,23 +1048,24 @@ async function calendarPage(box, svc) {
 /* =========================================================================
  * History & blocklist
  * ========================================================================= */
-const EVT = {
-  grabbed: 'Récupéré', downloadFolderImported: 'Importé', downloadFailed: 'Échec', movieFileDeleted: 'Fichier supprimé',
-  episodeFileDeleted: 'Fichier supprimé', movieFileRenamed: 'Renommé', episodeFileRenamed: 'Renommé', downloadIgnored: 'Ignoré',
-  movieFolderImported: 'Dossier importé', seriesFolderImported: 'Dossier importé', downloadImported: 'Importé',
-  indexerQuery: 'Recherche', releaseGrabbed: 'Release envoyée', indexerRss: 'RSS', indexerAuth: 'Authentification', indexerInfoQuery: 'Info',
-};
+const EVT = () => ({
+  grabbed: L('Récupéré', 'Grabbed'), downloadFolderImported: L('Importé', 'Imported'), downloadFailed: L('Échec', 'Failed'),
+  movieFileDeleted: L('Fichier supprimé', 'File deleted'), episodeFileDeleted: L('Fichier supprimé', 'File deleted'),
+  movieFileRenamed: L('Renommé', 'Renamed'), episodeFileRenamed: L('Renommé', 'Renamed'), downloadIgnored: L('Ignoré', 'Ignored'),
+  movieFolderImported: L('Dossier importé', 'Folder imported'), seriesFolderImported: L('Dossier importé', 'Folder imported'), downloadImported: L('Importé', 'Imported'),
+  indexerQuery: L('Recherche', 'Query'), releaseGrabbed: L('Release envoyée', 'Release grabbed'), indexerRss: 'RSS', indexerAuth: L('Authentification', 'Auth'), indexerInfoQuery: 'Info',
+});
 function historyRow(svc, h, compact) {
   const ev = h.eventType;
-  const t = EVT[ev] || ev;
+  const t = EVT()[ev] || ev;
   const cls = h.successful === false || /fail/i.test(ev) ? 'bad' : /import/i.test(ev) ? 'ok' : /grab/i.test(ev) ? 'info' : /delet/i.test(ev) ? 'warn' : '';
   let main = '', sub = h.sourceTitle || '';
   if (svc === 'radarr') main = compact ? '' : (h.movie?.title || '');
   else if (svc === 'sonarr') main = h.series ? `${h.series.title} ${h.episode ? epCode(h.episode) : ''}` : '';
   else {
     main = indexerName(h.indexerId);
-    sub = h.data?.grabTitle || h.data?.query || (ev === 'indexerRss' ? 'Flux RSS' : '') || '';
-    if (h.data?.source) sub += ` (via ${h.data.source})`;
+    sub = h.data?.grabTitle || h.data?.query || (ev === 'indexerRss' ? L('Flux RSS', 'RSS feed') : '') || '';
+    if (h.data?.source) sub += L(` (via ${h.data.source})`, ` (via ${h.data.source})`);
   }
   const q = h.quality?.quality?.name;
   return `<div class="li"><span class="badge ${cls}">${esc(t)}</span><div class="grow">${main ? `<div class="b small">${esc(main)}</div>` : ''}
@@ -1032,7 +1074,14 @@ function historyRow(svc, h, compact) {
 }
 function indexerName(id) {
   const x = (cache['prowlarr:indexers'] || []).find(i => i.id === id);
-  return x ? x.name : (id ? `Indexeur #${id}` : '');
+  return x ? x.name : (id ? L(`Indexeur #${id}`, `Indexer #${id}`) : '');
+}
+function moreButton(box, hasMore, onMore) {
+  const more = $('#more', box);
+  if (hasMore) {
+    more.innerHTML = `<button class="btn">${L('Charger plus', 'Load more')}</button>`;
+    more.firstChild.onclick = e => act(e.currentTarget, onMore);
+  } else more.innerHTML = '';
 }
 async function historyPage(box, svc) {
   if (svc === 'prowlarr') await cached('prowlarr:indexers', () => GET('prowlarr', '/indexer')).catch(() => { });
@@ -1043,36 +1092,35 @@ async function historyPage(box, svc) {
   const load = async () => {
     const d = await GET(svc, `/history?page=${page}&pageSize=40&sortKey=date&sortDirection=descending${inc}`);
     html += (d.records || []).map(h => historyRow(svc, h)).join('');
-    list.innerHTML = html || '<div class="empty">Historique vide.</div>';
-    const more = $('#more', box);
-    if (page * 40 < (d.totalRecords || 0)) {
-      more.innerHTML = '<button class="btn">Charger plus</button>';
-      more.firstChild.onclick = e => act(e.currentTarget, async () => { page++; await load(); });
-    } else more.innerHTML = '';
+    list.innerHTML = html || `<div class="empty">${L('Historique vide.', 'History is empty.')}</div>`;
+    moreButton(box, page * 40 < (d.totalRecords || 0), async () => { page++; await load(); });
   };
   await load();
 }
 async function blocklistPage(box, svc) {
-  box.innerHTML = `<div class="toolbar row between"><span class="muted small" id="cnt"></span><button class="btn small danger" id="clear">${icon('delete')} Tout vider</button></div><div id="list">${loading()}</div>`;
+  box.innerHTML = `<div class="toolbar row between"><span class="muted small" id="cnt"></span><button class="btn small danger" id="clear">${icon('delete')} ${L('Tout vider', 'Clear all')}</button></div><div id="list">${loading()}</div>`;
   const d = await GET(svc, `/blocklist?page=1&pageSize=200&sortKey=date&sortDirection=descending${svc === 'radarr' ? '&includeMovie=true' : '&includeSeries=true'}`);
   const recs = d.records || [];
-  $('#cnt', box).textContent = `${d.totalRecords || recs.length} release(s) bloquée(s)`;
+  const n = d.totalRecords || recs.length;
+  $('#cnt', box).textContent = L(`${n} release(s) bloquée(s)`, plural(n, '', 'blocked release'));
   $('#list', box).innerHTML = recs.length ? recs.map(r => `<div class="li"><div class="grow">
       <div class="b small">${esc(svc === 'radarr' ? (r.movie?.title || '') : (r.series?.title || ''))}</div>
       <div class="small">${esc(r.sourceTitle)}</div>
       <div class="muted xs">${fmtDate(r.date, true)} · ${esc(r.quality?.quality?.name || '')} · ${esc(r.indexer || '')}${r.message ? ' · ' + esc(r.message) : ''}</div></div>
-      <button class="icon-btn" data-del="${r.id}">${icon('delete')}</button></div>`).join('') : '<div class="empty">La liste noire est vide.</div>';
+      <button class="icon-btn" data-del="${r.id}">${icon('delete')}</button></div>`).join('') : `<div class="empty">${L('La liste noire est vide.', 'The blocklist is empty.')}</div>`;
   $('#list', box).onclick = e => {
     const b = e.target.closest('[data-del]');
-    if (b) act(b, async () => { await DEL(svc, '/blocklist/' + b.dataset.del); b.closest('.li').remove(); toast('Retiré de la liste noire'); });
+    if (b) act(b, async () => { await DEL(svc, '/blocklist/' + b.dataset.del); b.closest('.li').remove(); toast(L('Retiré de la liste noire', 'Removed from blocklist')); });
   };
-  $('#clear', box).onclick = () => recs.length && confirmSheet({ title: 'Vider la liste noire ?', msg: `${recs.length} release(s) seront retirées.`, ok: 'Vider', danger: true })
-    .then(v => v && act(null, async () => {
-      await api(svc, 'DELETE', '/blocklist/bulk', { ids: recs.map(r => r.id) }).catch(async () => {
-        for (const r of recs) await DEL(svc, '/blocklist/' + r.id);
-      });
-      toast('Liste noire vidée'); render();
-    }));
+  $('#clear', box).onclick = () => recs.length && confirmSheet({
+    title: L('Vider la liste noire ?', 'Clear the blocklist?'),
+    msg: L(`${recs.length} release(s) seront retirées.`, `${plural(recs.length, '', 'release')} will be removed.`), ok: L('Vider', 'Clear'), danger: true,
+  }).then(v => v && act(null, async () => {
+    await api(svc, 'DELETE', '/blocklist/bulk', { ids: recs.map(r => r.id) }).catch(async () => {
+      for (const r of recs) await DEL(svc, '/blocklist/' + r.id);
+    });
+    toast(L('Liste noire vidée', 'Blocklist cleared')); render();
+  }));
 }
 
 /* =========================================================================
@@ -1080,8 +1128,8 @@ async function blocklistPage(box, svc) {
  * ========================================================================= */
 async function sonarrWanted(box) {
   box.innerHTML = `<div class="toolbar row between"><span class="muted small" id="cnt"></span>
-    <button class="btn small primary" id="all">${icon('search')} Tout rechercher</button></div><div id="list">${loading()}</div><div class="more" id="more"></div>`;
-  $('#all', box).onclick = e => act(e.currentTarget, () => command('sonarr', 'MissingEpisodeSearch', {}, 'Recherche des épisodes manquants'));
+    <button class="btn small primary" id="all">${icon('search')} ${L('Tout rechercher', 'Search all')}</button></div><div id="list">${loading()}</div><div class="more" id="more"></div>`;
+  $('#all', box).onclick = e => act(e.currentTarget, () => command('sonarr', 'MissingEpisodeSearch', {}, L('Recherche des épisodes manquants', 'Missing episodes search')));
   const list = $('#list', box);
   let page = 1, html = '';
   const recs = [];
@@ -1090,23 +1138,20 @@ async function sonarrWanted(box) {
     let d;
     try { d = await GET('sonarr', base + '&sortKey=episodes.airDateUtc&sortDirection=descending'); }
     catch (e) { d = await GET('sonarr', base); }
-    $('#cnt', box).textContent = `${d.totalRecords || 0} épisode(s) manquant(s)`;
+    const n = d.totalRecords || 0;
+    $('#cnt', box).textContent = L(`${n} épisode(s) manquant(s)`, plural(n, '', 'missing episode'));
     for (const ep of d.records || []) {
       const i = recs.push(ep) - 1;
       html += `<div class="li"><div class="grow click" data-open="${i}"><div class="b small">${esc(ep.series?.title || '')}</div>
-        <div class="small">${epCode(ep)} · ${esc(ep.title || 'TBA')}</div><div class="muted xs">Diffusé le ${fmtDate(ep.airDateUtc)}</div></div>
+        <div class="small">${epCode(ep)} · ${esc(ep.title || 'TBA')}</div><div class="muted xs">${L('Diffusé le', 'Aired')} ${fmtDate(ep.airDateUtc)}</div></div>
         <button class="icon-btn" data-s="${i}">${icon('search')}</button><button class="icon-btn" data-m="${i}">${icon('list')}</button></div>`;
     }
-    list.innerHTML = html || '<div class="empty">Aucun épisode manquant 🎉</div>';
-    const more = $('#more', box);
-    if (page * 40 < (d.totalRecords || 0)) {
-      more.innerHTML = '<button class="btn">Charger plus</button>';
-      more.firstChild.onclick = e => act(e.currentTarget, async () => { page++; await load(); });
-    } else more.innerHTML = '';
+    list.innerHTML = html || `<div class="empty">${L('Aucun épisode manquant 🎉', 'No missing episodes 🎉')}</div>`;
+    moreButton(box, page * 40 < n, async () => { page++; await load(); });
   };
   list.onclick = e => {
     const s = e.target.closest('[data-s]'), m = e.target.closest('[data-m]'), o = e.target.closest('[data-open]');
-    if (s) { const ep = recs[+s.dataset.s]; act(s, () => command('sonarr', 'EpisodeSearch', { episodeIds: [ep.id] }, `Recherche ${epCode(ep)}`)); }
+    if (s) { const ep = recs[+s.dataset.s]; act(s, () => command('sonarr', 'EpisodeSearch', { episodeIds: [ep.id] }, L(`Recherche ${epCode(ep)}`, `${epCode(ep)} search`))); }
     else if (m) { const ep = recs[+m.dataset.m]; openReleases('sonarr', 'episodeId=' + ep.id, `${ep.series?.title || ''} ${epCode(ep)}`); }
     else if (o) { const ep = recs[+o.dataset.open]; openSeries(ep.seriesId, ep.series?.title); }
   };
@@ -1116,13 +1161,13 @@ async function sonarrWanted(box) {
 /* =========================================================================
  * System (all services)
  * ========================================================================= */
-const QUICK = {
-  radarr: [['RssSync', 'Synchroniser les flux RSS'], ['MissingMoviesSearch', 'Rechercher tous les films manquants'],
-    ['RefreshMovie', 'Actualiser tous les films'], ['RefreshMonitoredDownloads', 'Rafraîchir les téléchargements'], ['Backup', 'Créer une sauvegarde']],
-  sonarr: [['RssSync', 'Synchroniser les flux RSS'], ['MissingEpisodeSearch', 'Rechercher tous les épisodes manquants'],
-    ['RefreshSeries', 'Actualiser toutes les séries'], ['RefreshMonitoredDownloads', 'Rafraîchir les téléchargements'], ['Backup', 'Créer une sauvegarde']],
-  prowlarr: [['ApplicationIndexerSync', 'Synchroniser les indexeurs vers les applis'], ['CheckHealth', 'Vérifier la santé'], ['Backup', 'Créer une sauvegarde']],
-};
+const QUICK = () => ({
+  radarr: [['RssSync', L('Synchroniser les flux RSS', 'RSS sync')], ['MissingMoviesSearch', L('Rechercher tous les films manquants', 'Search all missing movies')],
+    ['RefreshMovie', L('Actualiser tous les films', 'Refresh all movies')], ['RefreshMonitoredDownloads', L('Rafraîchir les téléchargements', 'Refresh downloads')], ['Backup', L('Créer une sauvegarde', 'Create backup')]],
+  sonarr: [['RssSync', L('Synchroniser les flux RSS', 'RSS sync')], ['MissingEpisodeSearch', L('Rechercher tous les épisodes manquants', 'Search all missing episodes')],
+    ['RefreshSeries', L('Actualiser toutes les séries', 'Refresh all series')], ['RefreshMonitoredDownloads', L('Rafraîchir les téléchargements', 'Refresh downloads')], ['Backup', L('Créer une sauvegarde', 'Create backup')]],
+  prowlarr: [['ApplicationIndexerSync', L('Synchroniser les indexeurs vers les applis', 'Sync indexers to apps')], ['CheckHealth', L('Vérifier la santé', 'Check health')], ['Backup', L('Créer une sauvegarde', 'Create backup')]],
+});
 async function systemPage(box, svc) {
   box.innerHTML = loading();
   const [st, health, disk, tasks] = await Promise.all([
@@ -1131,31 +1176,33 @@ async function systemPage(box, svc) {
     GET(svc, '/system/task').catch(() => []),
   ]);
   const name = SERVICES[svc].name;
+  const hType = t => t === 'error' ? ['bad', L('Erreur', 'Error')] : t === 'warning' ? ['warn', L('Alerte', 'Warning')] : ['info', 'Info'];
   box.innerHTML = `
-    <div class="section"><h3>Santé</h3>${health.length ? health.map(h => `<div class="li">
-        <span class="badge ${h.type === 'error' ? 'bad' : h.type === 'warning' ? 'warn' : 'info'}">${h.type === 'error' ? 'Erreur' : h.type === 'warning' ? 'Alerte' : 'Info'}</span>
-        <div class="grow small">${esc(h.message)}</div></div>`).join('') : '<div class="ok-line">✓ Aucun problème détecté</div>'}</div>
-    ${disk.length ? `<div class="section"><h3>Espace disque</h3>${disk.map(d => {
+    <div class="section"><h3>${L('Santé', 'Health')}</h3>${health.length ? health.map(h => {
+      const [c, l] = hType(h.type);
+      return `<div class="li"><span class="badge ${c}">${l}</span><div class="grow small">${esc(h.message)}</div></div>`;
+    }).join('') : `<div class="ok-line">✓ ${L('Aucun problème détecté', 'No issues detected')}</div>`}</div>
+    ${disk.length ? `<div class="section"><h3>${L('Espace disque', 'Disk space')}</h3>${disk.map(d => {
       const used = d.totalSpace ? 100 * (1 - d.freeSpace / d.totalSpace) : 0;
       return `<div class="disk"><div class="row between"><span class="small ellipsis grow">${esc(d.label || d.path)}</span>
-        <span class="muted xs">${fmtSize(d.freeSpace)} libres / ${fmtSize(d.totalSpace)}</span></div>
+        <span class="muted xs">${fmtSize(d.freeSpace)} ${L('libres', 'free')} / ${fmtSize(d.totalSpace)}</span></div>
         <div class="pbar big"><i class="${used > 90 ? 'bad' : ''}" style="width:${used}%"></i></div></div>`;
     }).join('')}</div>` : ''}
-    <div class="section"><h3>Actions</h3><div class="btn-col">${QUICK[svc].map(([c, l]) => `<button class="btn" data-cmd="${c}" data-l="${esc(l)}">${esc(l)}</button>`).join('')}</div></div>
-    ${tasks.length ? `<div class="section"><h3>Tâches planifiées</h3>${tasks.map(t => `<div class="li"><div class="grow">
+    <div class="section"><h3>Actions</h3><div class="btn-col">${QUICK()[svc].map(([c, l]) => `<button class="btn" data-cmd="${c}" data-l="${esc(l)}">${esc(l)}</button>`).join('')}</div></div>
+    ${tasks.length ? `<div class="section"><h3>${L('Tâches planifiées', 'Scheduled tasks')}</h3>${tasks.map(t => `<div class="li"><div class="grow">
         <div class="b small">${esc(t.name)}</div>
-        <div class="muted xs">Dernière : ${t.lastExecution && new Date(t.lastExecution).getFullYear() > 2000 ? 'il y a ' + fmtAge(t.lastExecution) : '—'} · Prochaine : ${t.nextExecution ? fmtDate(t.nextExecution, true) : '—'}</div></div>
+        <div class="muted xs">${L('Dernière', 'Last')} : ${t.lastExecution && new Date(t.lastExecution).getFullYear() > 2000 ? ago(t.lastExecution) : '—'} · ${L('Prochaine', 'Next')} : ${t.nextExecution ? fmtDate(t.nextExecution, true) : '—'}</div></div>
         <button class="icon-btn" data-cmd="${esc(t.taskName)}" data-l="${esc(t.name)}">${icon('play')}</button></div>`).join('')}</div>` : ''}
-    <div class="section"><h3>À propos</h3>${kv([
-      ['Version', st.version], ['Branche', st.branch], ['Système', [st.osName, st.osVersion].filter(Boolean).join(' ')],
-      ['Docker', st.isDocker ? 'Oui' : null], ['Runtime', st.runtimeName ? `${st.runtimeName} ${st.runtimeVersion || ''}` : null],
-      ['Base de données', st.databaseType ? `${st.databaseType} ${st.databaseVersion || ''}` : null],
-      ['Démarré le', st.startTime && fmtDate(st.startTime, true)], ['Données', st.appData], ['Base URL', st.urlBase],
+    <div class="section"><h3>${L('À propos', 'About')}</h3>${kv([
+      ['Version', st.version], [L('Branche', 'Branch'), st.branch], [L('Système', 'OS'), [st.osName, st.osVersion].filter(Boolean).join(' ')],
+      ['Docker', st.isDocker ? L('Oui', 'Yes') : null], ['Runtime', st.runtimeName ? `${st.runtimeName} ${st.runtimeVersion || ''}` : null],
+      [L('Base de données', 'Database'), st.databaseType ? `${st.databaseType} ${st.databaseVersion || ''}` : null],
+      [L('Démarré le', 'Started'), st.startTime && fmtDate(st.startTime, true)], [L('Données', 'App data'), st.appData], ['Base URL', st.urlBase],
     ])}</div>
     <div class="section btn-col">
-      <button class="btn" id="logs">${icon('list')} Journaux</button>
-      <button class="btn" id="web">${icon('open')} Ouvrir l'interface web complète</button>
-      <button class="btn danger" id="restart">${icon('refresh')} Redémarrer ${name}</button>
+      <button class="btn" id="logs">${icon('list')} ${L('Journaux', 'Logs')}</button>
+      <button class="btn" id="web">${icon('open')} ${L("Ouvrir l'interface web complète", 'Open full web interface')}</button>
+      <button class="btn danger" id="restart">${icon('refresh')} ${L('Redémarrer', 'Restart')} ${name}</button>
     </div>`;
   box.onclick = e => {
     const b = e.target.closest('[data-cmd]');
@@ -1163,48 +1210,53 @@ async function systemPage(box, svc) {
   };
   $('#logs', box).onclick = () => openLogs(svc);
   $('#web', box).onclick = () => openWeb(svc);
-  $('#restart', box).onclick = () => confirmSheet({ title: `Redémarrer ${name} ?`, ok: 'Redémarrer', danger: true })
-    .then(v => v && act(null, async () => { await POST(svc, '/system/restart'); toast(`${name} redémarre…`); }));
+  $('#restart', box).onclick = () => confirmSheet({ title: L(`Redémarrer ${name} ?`, `Restart ${name}?`), ok: L('Redémarrer', 'Restart'), danger: true })
+    .then(v => v && act(null, async () => { await POST(svc, '/system/restart'); toast(L(`${name} redémarre…`, `${name} is restarting…`)); }));
 }
 function openLogs(svc) {
-  push('Journaux', async box => {
+  push(L('Journaux', 'Logs'), async box => {
     box.innerHTML = loading();
     const d = await GET(svc, '/log?page=1&pageSize=100&sortKey=time&sortDirection=descending');
     const recs = d.records || [];
     box.innerHTML = recs.length ? recs.map(l => `<div class="li"><span class="badge ${/error|fatal/.test(l.level) ? 'bad' : l.level === 'warn' ? 'warn' : 'info'}">${esc(l.level)}</span>
       <div class="grow"><div class="muted xs">${fmtDate(l.time, true)} · ${esc(l.logger)}</div><div class="small mono">${esc(l.message)}</div>
-      ${l.exception ? `<pre class="xs">${esc(l.exception)}</pre>` : ''}</div></div>`).join('') : '<div class="empty">Aucun journal.</div>';
+      ${l.exception ? `<pre class="xs">${esc(l.exception)}</pre>` : ''}</div></div>`).join('') : `<div class="empty">${L('Aucun journal.', 'No logs.')}</div>`;
   });
 }
 
 /* =========================================================================
  * Prowlarr
  * ========================================================================= */
-const CATS = [['', 'Toutes catégories'], ['2000', 'Films'], ['5000', 'Séries TV'], ['3000', 'Audio'], ['7000', 'Livres'], ['4000', 'PC / Logiciels'], ['1000', 'Consoles'], ['6000', 'XXX'], ['8000', 'Autre']];
-const PRIV = { public: 'Public', private: 'Privé', semiPrivate: 'Semi-privé' };
+const CATS = () => [['', L('Toutes catégories', 'All categories')], ['2000', L('Films', 'Movies')], ['5000', L('Séries TV', 'TV')], ['3000', 'Audio'], ['7000', L('Livres', 'Books')], ['4000', L('PC / Logiciels', 'PC / Software')], ['1000', 'Console'], ['6000', 'XXX'], ['8000', L('Autre', 'Other')]];
+const PRIV = () => ({ public: 'Public', private: L('Privé', 'Private'), semiPrivate: L('Semi-privé', 'Semi-private') });
 
 async function prowlarrSearch(box) {
   const st = state.ps = state.ps || { q: '', type: 'search', cat: '', idx: '', sort: 'seeders', results: null };
   const indexers = await cached('prowlarr:indexers', () => GET('prowlarr', '/indexer'), 60000);
   const enabled = indexers.filter(i => i.enable).sort((a, b) => a.name.localeCompare(b.name));
   box.innerHTML = `<div class="toolbar"><form class="searchbar" id="f">
-      <input class="input" type="search" id="q" placeholder="Rechercher sur tous les indexeurs…" enterkeyhint="search">
+      <input class="input" type="search" id="q" placeholder="${L('Rechercher sur tous les indexeurs…', 'Search all indexers…')}" enterkeyhint="search">
       <button class="btn primary" type="submit">${icon('search')}</button></form>
-      <div class="row"><select class="select" id="type">${opts([['search', 'Recherche libre'], ['movie', 'Film'], ['tvsearch', 'Série TV'], ['music', 'Musique'], ['book', 'Livre']], st.type)}</select>
-        <select class="select" id="cat">${opts(CATS, st.cat)}</select></div>
-      <div class="row"><select class="select" id="idx">${opts([['', `Tous les indexeurs (${enabled.length})`], ...enabled.map(i => [i.id, i.name])], st.idx)}</select>
-        <select class="select" id="srt">${opts([['seeders', 'Seeders'], ['age', 'Plus récent'], ['size_d', 'Taille ↓'], ['size_a', 'Taille ↑'], ['grabs', 'Téléchargements']], st.sort)}</select></div>
+      <div class="row"><select class="select" id="type">${opts([['search', L('Recherche libre', 'Basic search')], ['movie', L('Film', 'Movie')], ['tvsearch', L('Série TV', 'TV')], ['music', L('Musique', 'Music')], ['book', L('Livre', 'Book')]], st.type)}</select>
+        <select class="select" id="cat">${opts(CATS(), st.cat)}</select></div>
+      <div class="row"><select class="select" id="idx">${opts([['', L(`Tous les indexeurs (${enabled.length})`, `All indexers (${enabled.length})`)], ...enabled.map(i => [i.id, i.name])], st.idx)}</select>
+        <select class="select" id="srt">${opts([['seeders', 'Seeders'], ['age', L('Plus récent', 'Newest')], ['size_d', L('Taille ↓', 'Size ↓')], ['size_a', L('Taille ↑', 'Size ↑')], ['grabs', L('Téléchargements', 'Grabs')]], st.sort)}</select></div>
       <div class="muted small" id="cnt"></div></div><div id="res"></div>`;
   const res = $('#res', box);
   $('#q', box).value = st.q;
   const draw = () => {
-    if (!st.results) { res.innerHTML = `<div class="empty">${enabled.length ? 'Lance une recherche : les résultats peuvent être envoyés directement à ton client de téléchargement.' : 'Aucun indexeur activé dans Prowlarr.'}</div>`; return; }
+    if (!st.results) {
+      res.innerHTML = `<div class="empty">${enabled.length
+        ? L('Lance une recherche : les résultats peuvent être envoyés directement à ton client de téléchargement.', 'Run a search: results can be sent straight to your download client.')
+        : L('Aucun indexeur activé dans Prowlarr.', 'No indexer enabled in Prowlarr.')}</div>`;
+      return;
+    }
     const cmp = {
       seeders: (a, b) => (b.seeders || 0) - (a.seeders || 0), age: (a, b) => new Date(b.publishDate) - new Date(a.publishDate),
       size_d: (a, b) => b.size - a.size, size_a: (a, b) => a.size - b.size, grabs: (a, b) => (b.grabs || 0) - (a.grabs || 0),
     }[st.sort];
     const arr = st.results.map((r, i) => ({ r, i })).sort((a, b) => cmp(a.r, b.r));
-    $('#cnt', box).textContent = `${arr.length} résultat(s)`;
+    $('#cnt', box).textContent = plural(arr.length, 'résultat', 'result');
     res.innerHTML = arr.length ? arr.map(({ r, i }) => `<div class="rel"><div class="rel-title">${esc(r.title)}</div>
         <div class="chips"><span class="chip">${fmtSize(r.size)}</span>
           ${r.protocol === 'torrent' ? `<span class="chip ${r.seeders > 0 ? 'ok' : 'bad'}">▲ ${r.seeders ?? '?'} ▼ ${r.leechers ?? '?'}</span>` : '<span class="chip">Usenet</span>'}
@@ -1213,8 +1265,8 @@ async function prowlarrSearch(box) {
           ${(r.categories || []).slice(0, 2).map(c => `<span class="chip">${esc(c.name)}</span>`).join('')}</div>
         <div class="row">${r.infoUrl ? `<button class="icon-btn" data-info="${i}">${icon('open')}</button>` : ''}
           ${r.magnetUrl || r.downloadUrl ? `<button class="icon-btn" data-copy="${i}">${icon('copy')}</button>` : ''}
-          <button class="btn small primary" data-grab="${i}">${icon('send')} Envoyer au client</button></div></div>`).join('')
-      : '<div class="empty">Aucun résultat.</div>';
+          <button class="btn small primary" data-grab="${i}">${icon('send')} ${L('Envoyer au client', 'Send to client')}</button></div></div>`).join('')
+      : `<div class="empty">${L('Aucun résultat.', 'No results.')}</div>`;
   };
   const doSearch = async () => {
     const q = $('#q', box).value.trim();
@@ -1222,7 +1274,7 @@ async function prowlarrSearch(box) {
     const p = new URLSearchParams({ query: q, type: st.type, limit: '100', offset: '0' });
     if (st.cat) p.append('categories', st.cat);
     (st.idx ? [st.idx] : enabled.map(i => i.id)).forEach(id => p.append('indexerIds', id));
-    res.innerHTML = loading('Recherche sur les indexeurs…');
+    res.innerHTML = loading(L('Recherche sur les indexeurs…', 'Searching indexers…'));
     $('#cnt', box).textContent = '';
     try {
       st.results = await GET('prowlarr', '/search?' + p.toString());
@@ -1239,15 +1291,15 @@ async function prowlarrSearch(box) {
       const r = st.results[+cp.dataset.copy];
       const link = r.magnetUrl || r.downloadUrl;
       if (window.Native) Native.copy(link); else navigator.clipboard?.writeText(link);
-      return toast('Lien copié ✓');
+      return toast(L('Lien copié ✓', 'Link copied ✓'));
     }
     const b = e.target.closest('[data-grab]');
     if (!b) return;
     const r = st.results[+b.dataset.grab];
     act(b, async () => {
       await POST('prowlarr', '/search', { guid: r.guid, indexerId: r.indexerId });
-      b.classList.remove('primary'); b.classList.add('done'); b.innerHTML = `${icon('check')} Envoyé`;
-      toast('Envoyé au client de téléchargement ✓');
+      b.classList.remove('primary'); b.classList.add('done'); b.innerHTML = `${icon('check')} ${L('Envoyé', 'Sent')}`;
+      toast(L('Envoyé au client de téléchargement ✓', 'Sent to download client ✓'));
     });
   };
   draw();
@@ -1259,21 +1311,22 @@ async function prowlarrIndexers(box) {
   setCache('prowlarr:indexers', list);
   list.sort((a, b) => a.name.localeCompare(b.name));
   const stMap = Object.fromEntries(status.map(s => [s.indexerId, s]));
-  box.innerHTML = `<div class="toolbar row between"><span class="muted small">${list.length} indexeur(s) · ${list.filter(i => i.enable).length} actif(s)</span>
-      <div class="row"><button class="btn small" id="testall">${icon('check')} Tout tester</button>
-      <button class="btn small primary" id="add">${icon('add')} Ajouter</button></div></div>
+  const nOn = list.filter(i => i.enable).length;
+  box.innerHTML = `<div class="toolbar row between"><span class="muted small">${L(`${list.length} indexeur(s) · ${nOn} actif(s)`, `${plural(list.length, '', 'indexer')} · ${nOn} enabled`)}</span>
+      <div class="row"><button class="btn small" id="testall">${icon('check')} ${L('Tout tester', 'Test all')}</button>
+      <button class="btn small primary" id="add">${icon('add')} ${L('Ajouter', 'Add')}</button></div></div>
     <div class="list">${list.map((x, i) => {
       const s = stMap[x.id];
       const dis = s?.disabledTill && new Date(s.disabledTill) > new Date();
       return `<div class="li" data-row="${x.id}"><label class="switch"><input type="checkbox" data-en="${i}"${x.enable ? ' checked' : ''}><span></span></label>
         <div class="grow"><div class="b">${esc(x.name)}</div>
-          <div class="chips"><span class="chip">${x.protocol === 'torrent' ? 'Torrent' : 'Usenet'}</span><span class="chip">${esc(PRIV[x.privacy] || x.privacy || '')}</span>
-          <span class="chip">Priorité ${x.priority}</span>${dis ? `<span class="chip bad">En échec jusqu'à ${fmtDate(s.disabledTill, true)}</span>` : ''}</div>
+          <div class="chips"><span class="chip">${x.protocol === 'torrent' ? 'Torrent' : 'Usenet'}</span><span class="chip">${esc(PRIV()[x.privacy] || x.privacy || '')}</span>
+          <span class="chip">${L('Priorité', 'Priority')} ${x.priority}</span>${dis ? `<span class="chip bad">${L("En échec jusqu'à", 'Failing until')} ${fmtDate(s.disabledTill, true)}</span>` : ''}</div>
           <div class="xs" id="tr-${x.id}"></div></div>
-        <button class="icon-btn" data-test="${i}" title="Tester">${icon('check')}</button>
-        <button class="icon-btn" data-del="${i}" title="Supprimer">${icon('delete')}</button></div>`;
-    }).join('') || '<div class="empty">Aucun indexeur. Ajoute-en un depuis l\'interface web.</div>'}</div>
-    <div class="muted small" style="padding:12px">L'ajout et la configuration détaillée des indexeurs s'ouvrent dans l'interface web de Prowlarr.</div>`;
+        <button class="icon-btn" data-test="${i}" title="Test">${icon('check')}</button>
+        <button class="icon-btn" data-del="${i}" title="${L('Supprimer', 'Delete')}">${icon('delete')}</button></div>`;
+    }).join('') || `<div class="empty">${L("Aucun indexeur. Ajoute-en un depuis l'interface web.", 'No indexers. Add one from the web interface.')}</div>`}</div>
+    <div class="muted small" style="padding:12px">${L("L'ajout et la configuration détaillée des indexeurs s'ouvrent dans l'interface web de Prowlarr.", "Adding and configuring indexers opens Prowlarr's web interface.")}</div>`;
   const setRes = (id, ok, msg) => { const el = $('#tr-' + id, box); if (el) el.innerHTML = `<span class="st-${ok ? 'ok' : 'bad'}">${esc(msg)}</span>`; };
   box.onchange = e => {
     const c = e.target.closest('[data-en]');
@@ -1283,7 +1336,7 @@ async function prowlarrIndexers(box) {
       try {
         await PUT('prowlarr', '/indexer/' + x.id, { ...x, enable: c.checked });
         x.enable = c.checked; dropCache('prowlarr:indexers');
-        toast(`${x.name} ${c.checked ? 'activé' : 'désactivé'}`);
+        toast(`${x.name} ${c.checked ? L('activé', 'enabled') : L('désactivé', 'disabled')}`);
       } catch (err) { c.checked = !c.checked; throw err; }
     });
   };
@@ -1292,20 +1345,20 @@ async function prowlarrIndexers(box) {
     if (t) {
       const x = list[+t.dataset.test];
       act(t, async () => {
-        try { await POST('prowlarr', '/indexer/test', x); setRes(x.id, true, '✓ Test réussi'); }
+        try { await POST('prowlarr', '/indexer/test', x); setRes(x.id, true, L('✓ Test réussi', '✓ Test passed')); }
         catch (err) { setRes(x.id, false, '✗ ' + err.message); }
       });
     } else if (d) {
       const x = list[+d.dataset.del];
-      confirmSheet({ title: `Supprimer ${x.name} ?`, ok: 'Supprimer', danger: true })
-        .then(v => v && act(null, async () => { await DEL('prowlarr', '/indexer/' + x.id); dropCache('prowlarr:indexers'); toast('Indexeur supprimé'); render(); }));
+      confirmSheet({ title: L(`Supprimer ${x.name} ?`, `Delete ${x.name}?`), ok: L('Supprimer', 'Delete'), danger: true })
+        .then(v => v && act(null, async () => { await DEL('prowlarr', '/indexer/' + x.id); dropCache('prowlarr:indexers'); toast(L('Indexeur supprimé', 'Indexer deleted')); render(); }));
     }
   };
   $('#testall', box).onclick = e => act(e.currentTarget, async () => {
     // testall answers 400 with the per-indexer results when at least one fails
     const r = await api('prowlarr', 'POST', '/indexer/testall', {}, true);
     (Array.isArray(r) ? r : []).forEach(x => setRes(x.id, x.isValid, x.isValid ? '✓ OK' : '✗ ' + (x.validationFailures || []).map(v => v.errorMessage).join(', ')));
-    toast('Tests terminés');
+    toast(L('Tests terminés', 'Tests complete'));
   });
   $('#add', box).onclick = () => openWeb('prowlarr', '/');
 }
@@ -1318,27 +1371,30 @@ async function prowlarrStats(box) {
   const sum = k => arr.reduce((s, x) => s + (x[k] || 0), 0);
   const maxQ = Math.max(1, ...arr.map(x => x.numberOfQueries || 0));
   box.innerHTML = `<div class="section"><h3>Total</h3><div class="totals">
-      <div class="total"><b>${sum('numberOfQueries')}</b><span>Requêtes</span></div>
-      <div class="total"><b>${sum('numberOfGrabs')}</b><span>Téléchargements</span></div>
-      <div class="total"><b>${sum('numberOfFailedQueries') + sum('numberOfFailedGrabs')}</b><span>Échecs</span></div></div></div>
-    <div class="section"><h3>Par indexeur</h3>${arr.map(x => `<div class="stat-row">
+      <div class="total"><b>${sum('numberOfQueries')}</b><span>${L('Requêtes', 'Queries')}</span></div>
+      <div class="total"><b>${sum('numberOfGrabs')}</b><span>${L('Téléchargements', 'Grabs')}</span></div>
+      <div class="total"><b>${sum('numberOfFailedQueries') + sum('numberOfFailedGrabs')}</b><span>${L('Échecs', 'Failures')}</span></div></div></div>
+    <div class="section"><h3>${L('Par indexeur', 'Per indexer')}</h3>${arr.map(x => {
+      const fails = (x.numberOfFailedQueries || 0) + (x.numberOfFailedGrabs || 0);
+      return `<div class="stat-row">
       <div class="row between"><span class="b small">${esc(x.indexerName || indexerName(x.indexerId))}</span><span class="muted xs">${x.averageResponseTime || 0} ms</span></div>
       <div class="pbar"><i style="width:${100 * (x.numberOfQueries || 0) / maxQ}%"></i></div>
-      <div class="muted xs" style="margin-top:4px">${x.numberOfQueries || 0} requêtes · ${x.numberOfGrabs || 0} grabs · ${x.numberOfRssQueries || 0} RSS
-        ${(x.numberOfFailedQueries || x.numberOfFailedGrabs) ? ` · <span class="st-bad">${(x.numberOfFailedQueries || 0) + (x.numberOfFailedGrabs || 0)} échecs</span>` : ''}</div></div>`).join('') || '<div class="muted small">Aucune donnée.</div>'}</div>`;
+      <div class="muted xs" style="margin-top:4px">${x.numberOfQueries || 0} ${L('requêtes', 'queries')} · ${x.numberOfGrabs || 0} grabs · ${x.numberOfRssQueries || 0} RSS
+        ${fails ? ` · <span class="st-bad">${fails} ${L('échecs', 'failures')}</span>` : ''}</div></div>`;
+    }).join('') || `<div class="muted small">${L('Aucune donnée.', 'No data.')}</div>`}</div>`;
 }
 
 async function prowlarrApps(box) {
   box.innerHTML = loading();
   const apps = await GET('prowlarr', '/applications');
-  const SYNC = { disabled: 'Désactivée', addOnly: 'Ajout seulement', fullSync: 'Synchro complète' };
-  box.innerHTML = `<div class="toolbar row between"><span class="muted small">${apps.length} application(s)</span>
-      <div class="row"><button class="btn small primary" id="sync">${icon('refresh')} Synchroniser</button></div></div>
+  const SYNC = { disabled: L('Désactivée', 'Disabled'), addOnly: L('Ajout seulement', 'Add and remove only'), fullSync: L('Synchro complète', 'Full sync') };
+  box.innerHTML = `<div class="toolbar row between"><span class="muted small">${plural(apps.length, 'application', 'application')}</span>
+      <div class="row"><button class="btn small primary" id="sync">${icon('refresh')} ${L('Synchroniser', 'Sync')}</button></div></div>
     <div class="list">${apps.map((a, i) => `<div class="li"><div class="grow"><div class="b">${esc(a.name)}</div>
       <div class="chips"><span class="chip">${esc(a.implementationName || a.implementation)}</span><span class="chip">${esc(SYNC[a.syncLevel] || a.syncLevel)}</span></div>
-      <div class="xs" id="ar-${i}"></div></div><button class="icon-btn" data-test="${i}" title="Tester">${icon('check')}</button></div>`).join('') || '<div class="empty">Aucune application liée.</div>'}</div>
-    <div class="section btn-col"><button class="btn" id="web">${icon('open')} Gérer les applications (interface web)</button></div>`;
-  $('#sync', box).onclick = e => act(e.currentTarget, () => command('prowlarr', 'ApplicationIndexerSync', {}, 'Synchronisation des indexeurs'));
+      <div class="xs" id="ar-${i}"></div></div><button class="icon-btn" data-test="${i}" title="Test">${icon('check')}</button></div>`).join('') || `<div class="empty">${L('Aucune application liée.', 'No linked applications.')}</div>`}</div>
+    <div class="section btn-col"><button class="btn" id="web">${icon('open')} ${L('Gérer les applications (interface web)', 'Manage applications (web interface)')}</button></div>`;
+  $('#sync', box).onclick = e => act(e.currentTarget, () => command('prowlarr', 'ApplicationIndexerSync', {}, L('Synchronisation des indexeurs', 'Indexer sync')));
   $('#web', box).onclick = () => openWeb('prowlarr', '/settings/applications');
   box.onclick = e => {
     const t = e.target.closest('[data-test]');
@@ -1346,7 +1402,7 @@ async function prowlarrApps(box) {
     const i = +t.dataset.test;
     act(t, async () => {
       const el = $('#ar-' + i, box);
-      try { await POST('prowlarr', '/applications/test', apps[i]); el.innerHTML = '<span class="st-ok">✓ Connexion OK</span>'; }
+      try { await POST('prowlarr', '/applications/test', apps[i]); el.innerHTML = `<span class="st-ok">✓ ${L('Connexion OK', 'Connection OK')}</span>`; }
       catch (err) { el.innerHTML = `<span class="st-bad">✗ ${esc(err.message)}</span>`; }
     });
   };
@@ -1359,18 +1415,21 @@ function appVersion() {
   try { return window.Native && Native.appVersion ? Native.appVersion() : ''; } catch (e) { return ''; }
 }
 function settingsPage(box) {
-  box.innerHTML = Object.entries(SERVICES).map(([k, s]) => `<div class="section svc-card" style="--accent:${s.color}">
+  box.innerHTML = `<div class="section"><h3>${L('Langue', 'Language')}</h3>
+      <select class="select" id="lang">${opts([['auto', L('Automatique (langue du téléphone)', 'Automatic (device language)')], ['fr', 'Français'], ['en', 'English']], cfg.lang)}</select></div>` +
+    Object.entries(SERVICES).map(([k, s]) => `<div class="section svc-card" style="--accent:${s.color}">
       <h3><span class="dot"></span>${s.name}</h3>
-      ${field('URL du serveur', `<input class="input" data-k="${k}" data-f="url" placeholder="http://192.168.1.10:${s.port}" inputmode="url" autocapitalize="off" autocorrect="off" spellcheck="false">`)}
-      ${field('Clé API', `<input class="input" data-k="${k}" data-f="apiKey" placeholder="32 caractères" autocapitalize="off" autocorrect="off" spellcheck="false">`)}
-      <div class="row"><button class="btn small" data-test="${k}">${icon('check')} Tester la connexion</button><span class="small grow" id="res-${k}"></span></div>
+      ${field(L('URL du serveur', 'Server URL'), `<input class="input" data-k="${k}" data-f="url" placeholder="http://192.168.1.10:${s.port}" inputmode="url" autocapitalize="off" autocorrect="off" spellcheck="false">`)}
+      ${field(L('Clé API', 'API key'), `<input class="input" data-k="${k}" data-f="apiKey" placeholder="${L('32 caractères', '32 characters')}" autocapitalize="off" autocorrect="off" spellcheck="false">`)}
+      <div class="row"><button class="btn small" data-test="${k}">${icon('check')} ${L('Tester la connexion', 'Test connection')}</button><span class="small grow" id="res-${k}"></span></div>
     </div>`).join('') + `
-    <div class="section"><h3>Options</h3>${chk('insecure', 'Accepter les certificats HTTPS auto-signés', cfg.insecure)}</div>
+    <div class="section"><h3>Options</h3>${chk('insecure', L('Accepter les certificats HTTPS auto-signés', 'Accept self-signed HTTPS certificates'), cfg.insecure)}</div>
     <div class="section muted small" style="line-height:1.5">
-      <p style="margin-top:0">🔑 La clé API se trouve dans chaque application : <b>Settings › General › Security › API Key</b>.</p>
-      <p>🌐 Si un service est derrière un reverse proxy avec un sous-chemin, indique l'URL complète (ex. <i>https://mondomaine.fr/radarr</i>).</p>
-      <p>📱 Depuis l'extérieur de ton réseau, utilise une URL accessible (VPN, Tailscale, reverse proxy…).</p>
-      <p style="margin-bottom:0">Arr Manager ${esc(appVersion())} · projet open source, non affilié à Radarr, Sonarr ou Prowlarr.</p></div>`;
+      <p style="margin-top:0">🔑 ${L('La clé API se trouve dans chaque application :', 'The API key is found in each app under')} <b>Settings › General › Security › API Key</b>.</p>
+      <p>🌐 ${L("Si un service est derrière un reverse proxy avec un sous-chemin, indique l'URL complète (ex. <i>https://example.com/radarr</i>).", 'If a service sits behind a reverse proxy with a sub-path, enter the full URL (e.g. <i>https://example.com/radarr</i>).')}</p>
+      <p>📱 ${L("Depuis l'extérieur de ton réseau, utilise une URL accessible (VPN, Tailscale, reverse proxy…).", 'Outside your home network, use a reachable URL (VPN, Tailscale, reverse proxy…).')}</p>
+      <p style="margin-bottom:0">Arr Manager ${esc(appVersion())} · ${L('projet open source, non affilié à Radarr, Sonarr ou Prowlarr.', 'open-source project, not affiliated with Radarr, Sonarr or Prowlarr.')}</p></div>`;
+  $('#lang', box).onchange = e => { cfg.lang = e.target.value; saveCfg(); applyLang(); renderChrome(); render(); };
   $$('input[data-k]', box).forEach(inp => {
     inp.value = cfg[inp.dataset.k][inp.dataset.f] || '';
     inp.oninput = () => { cfg[inp.dataset.k][inp.dataset.f] = inp.value.trim(); saveCfg(); dropCache(inp.dataset.k + ':'); };
@@ -1399,6 +1458,7 @@ function init() {
   $('#backBtn').innerHTML = icon('back');
   $('#webBtn').innerHTML = icon('open');
   $('#refreshBtn').innerHTML = icon('refresh');
+  renderChrome();
   $('#bottom').onclick = e => {
     const b = e.target.closest('button');
     if (!b) return;

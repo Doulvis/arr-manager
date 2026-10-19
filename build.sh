@@ -9,9 +9,9 @@
 set -euo pipefail
 
 SDK="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
-[ -n "$SDK" ] || { echo "ANDROID_HOME n'est pas défini" >&2; exit 1; }
+[ -n "$SDK" ] || { echo "ANDROID_HOME is not set" >&2; exit 1; }
 ANDROID_JAR="$SDK/platforms/android-34/android.jar"
-[ -f "$ANDROID_JAR" ] || { echo "android.jar introuvable (sdkmanager \"platforms;android-34\")" >&2; exit 1; }
+[ -f "$ANDROID_JAR" ] || { echo "android.jar not found (sdkmanager \"platforms;android-34\")" >&2; exit 1; }
 BT="$(ls -d "$SDK"/build-tools/*/ | sort -V | tail -n 1)"
 BT="${BT%/}"
 VERSION_NAME="${VERSION_NAME:-1.0.0}"
@@ -42,7 +42,7 @@ KS_PASS="${ARR_KEYSTORE_PASSWORD:-}"
 ALIAS="${ARR_KEY_ALIAS:-}"
 KEY_PASS="${ARR_KEY_PASSWORD:-}"
 if [ -z "$KS" ]; then
-  echo "ARR_KEYSTORE non défini : signature avec une clé de debug temporaire." >&2
+  echo "ARR_KEYSTORE not set: signing with a throwaway debug key." >&2
   KS="$B/debug.jks"; KS_PASS=android; ALIAS=debug; KEY_PASS=android
   keytool -genkeypair -keystore "$KS" -storepass "$KS_PASS" -keypass "$KEY_PASS" -alias "$ALIAS" \
     -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug" >/dev/null 2>&1

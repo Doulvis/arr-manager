@@ -1,120 +1,120 @@
 # Arr Manager
 
-Application Android légère pour piloter **Radarr**, **Sonarr** et **Prowlarr** depuis ton téléphone : ajouter des films et des séries, lancer des téléchargements, choisir une release à la main, suivre la file d'attente, gérer les indexeurs…
+A lightweight Android app to control **Radarr**, **Sonarr** and **Prowlarr** from your phone: add movies and series, start downloads, pick releases by hand, watch your download queue, manage indexers, and more.
 
-> 🇬🇧 *Lightweight Android client for Radarr, Sonarr and Prowlarr. Add movies and series, trigger automatic or interactive searches, monitor downloads and manage indexers. The UI is in French.*
+The app is available in **English** and **French**. It follows your phone's language by default, and you can change it in Settings.
 
 <p>
-  <img src="docs/screenshots/library.png" width="200" alt="Bibliothèque">
-  <img src="docs/screenshots/movie.png" width="200" alt="Fiche film">
-  <img src="docs/screenshots/series.png" width="200" alt="Fiche série">
-  <img src="docs/screenshots/interactive-search.png" width="200" alt="Recherche manuelle">
+  <img src="docs/screenshots/library.png" width="200" alt="Library">
+  <img src="docs/screenshots/movie.png" width="200" alt="Movie details">
+  <img src="docs/screenshots/series.png" width="200" alt="Series details">
+  <img src="docs/screenshots/interactive-search.png" width="200" alt="Interactive search">
 </p>
 
-## Fonctionnalités
+## Features
 
 **Radarr**
-- Bibliothèque en grille d'affiches, avec filtres (manquants, téléchargés, à venir…) et tris
-- Ajout de films (dossier racine, profil de qualité, disponibilité minimale, recherche immédiate)
-- Fiche film : recherche automatique, **recherche manuelle** avec choix de la release, surveillance, modification, actualisation, suppression (film et/ou fichier), historique
+- Poster grid library with filters (missing, downloaded, upcoming…) and sorting
+- Add movies with root folder, quality profile, minimum availability, and an option to search right away
+- Movie page: automatic search, **interactive search** where you pick the release yourself, monitor/unmonitor, edit, refresh, delete the movie and/or its file, history
 
 **Sonarr**
-- Mêmes fonctions pour les séries
-- Surveillance et recherche **par saison** et **par épisode**, recherche manuelle de packs de saison
-- Onglet « Manquants » avec recherche groupée
+- Everything above, for series
+- Monitor and search **per season** and **per episode**, including interactive search for season packs
+- "Wanted" tab listing missing episodes, with a search-all button
 
 **Prowlarr**
-- Recherche sur tous les indexeurs, envoi direct au client de téléchargement ou copie du lien magnet
-- Indexeurs : activer/désactiver, tester, supprimer · statistiques · applications liées et synchronisation
+- Search across all indexers, then send results straight to your download client or copy the magnet link
+- Indexers: enable/disable, test, delete; statistics; linked applications and sync
 
-**Commun**
-- File de téléchargement en temps réel (retirer, liste noire, forcer), calendrier, historique, liste noire
-- Santé, espace disque, tâches planifiées, journaux, sauvegarde, redémarrage
-- Accès à l'**interface web complète** de chaque service depuis l'app, pour les réglages avancés
+**Shared**
+- Live download queue (remove, blocklist, force), calendar, history, blocklist
+- Health checks, disk space, scheduled tasks, logs, backup, restart
+- One tap to open each service's **full web interface** inside the app, for advanced settings
 
 ## Installation
 
-1. Télécharge le dernier `ArrManager-x.y.z.apk` depuis la page [Releases](../../releases).
-2. Ouvre-le sur ton téléphone (Android 8.0 ou plus récent) et autorise l'installation depuis cette source.
-3. Dans l'onglet **Réglages**, saisis pour chaque service :
-   - l'**URL**, par exemple `http://192.168.1.10:7878` (Radarr), `:8989` (Sonarr), `:9696` (Prowlarr) ;
-   - la **clé API**, visible dans *Settings › General › Security › API Key*.
-4. Appuie sur **Tester la connexion**.
+1. Download the latest `ArrManager-x.y.z.apk` from the [Releases](../../releases) page.
+2. Open it on your phone (Android 8.0 or later) and allow installing apps from this source.
+3. In the **Settings** tab, enter for each service:
+   - its **URL**, e.g. `http://192.168.1.10:7878` (Radarr), `:8989` (Sonarr), `:9696` (Prowlarr)
+   - its **API key**, found under *Settings › General › Security › API Key*
+4. Tap **Test connection**.
 
-Depuis l'extérieur de ton réseau, utilise une URL joignable : VPN (WireGuard, Tailscale…) ou reverse proxy. Si le service est servi sous un sous-chemin, indique l'URL complète, par exemple `https://example.com/radarr`.
+To use the app away from home, you need a URL your phone can reach, such as a VPN (WireGuard, Tailscale…) or a reverse proxy. If a service is served under a sub-path, enter the full URL, e.g. `https://example.com/radarr`.
 
-## Confidentialité
+## Privacy
 
-- Aucune télémétrie, aucun compte, aucun serveur intermédiaire : l'app ne parle **qu'à tes propres serveurs**.
-- Les URL et les clés API sont stockées localement sur le téléphone et exclues des sauvegardes Android.
-- Les affiches sont chargées depuis les URL fournies par tes serveurs (en général TMDB/TheTVDB).
-- L'option « Accepter les certificats auto-signés » désactive la vérification TLS : ne l'active que pour tes propres serveurs.
+- No telemetry, no account, no third-party server: the app only talks to **your own servers**.
+- URLs and API keys are stored locally on the phone and excluded from Android cloud backups.
+- Posters are loaded from the URLs your servers provide (usually TMDB/TheTVDB).
+- The "Accept self-signed HTTPS certificates" option turns off TLS verification. Only enable it for your own servers.
 
-## Compiler soi-même
+## Building from source
 
-Le projet n'utilise pas Gradle : l'APK est construit directement avec les outils du SDK Android (`aapt2`, `javac`, `d8`, `zipalign`, `apksigner`). Le résultat pèse environ 50 Ko.
+The project doesn't use Gradle. The APK is built directly with the Android SDK tools (`aapt2`, `javac`, `d8`, `zipalign`, `apksigner`), and the result is about 50 KB.
 
-Prérequis : JDK 17+, et un SDK Android avec `platforms;android-34` et `build-tools;34.0.0`.
+Requirements: JDK 17+, and an Android SDK with `platforms;android-34` and `build-tools;34.0.0`.
 
 ```bash
 # Linux / macOS
-export ANDROID_HOME=/chemin/vers/android-sdk
+export ANDROID_HOME=/path/to/android-sdk
 ./build.sh
 ```
 
 ```powershell
 # Windows
-$env:ANDROID_HOME = "C:\chemin\vers\android-sdk"
-$env:JAVA_HOME    = "C:\chemin\vers\jdk-17"
+$env:ANDROID_HOME = "C:\path\to\android-sdk"
+$env:JAVA_HOME    = "C:\path\to\jdk-17"
 .\build.ps1
 ```
 
-Sans clé configurée, l'APK est signé avec une clé de debug temporaire. Pour signer avec ta propre clé, définis `ARR_KEYSTORE`, `ARR_KEYSTORE_PASSWORD`, `ARR_KEY_ALIAS` et `ARR_KEY_PASSWORD`.
+Without a configured key, the APK is signed with a throwaway debug key. To sign with your own key, set `ARR_KEYSTORE`, `ARR_KEYSTORE_PASSWORD`, `ARR_KEY_ALIAS` and `ARR_KEY_PASSWORD`.
 
-### Structure
+### Project layout
 
 ```
 AndroidManifest.xml
-src/com/arrmanager/app/   MainActivity (WebView + pont HTTP natif), WebActivity (interface web complète)
-assets/                   index.html, style.css, app.js : toute l'interface
-res/                      icône
-build.sh / build.ps1      scripts de compilation
+src/com/arrmanager/app/   MainActivity (WebView + native HTTP bridge), WebActivity (full web interface)
+assets/                   index.html, style.css, app.js: the whole UI
+res/                      app icon
+build.sh / build.ps1      build scripts
 ```
 
-L'interface est une page HTML/JS embarquée. Les appels API passent par le code natif (`HttpURLConnection`), ce qui évite les problèmes de CORS et autorise le HTTP en réseau local.
+The UI is a bundled HTML/JS page. API calls go through native code (`HttpURLConnection`), which avoids CORS issues and allows plain HTTP on your local network. All UI strings live in `assets/app.js` as `L('français', 'English')` pairs, so adding or fixing a translation is a one-line change.
 
-## Publier une version (mainteneurs)
+## Releasing (maintainers)
 
-Le workflow GitHub Actions compile l'APK à chaque push. Quand tu pousses un tag `vX.Y.Z`, il crée la Release avec l'APK en pièce jointe :
+The GitHub Actions workflow builds the APK on every push. Pushing a `vX.Y.Z` tag also creates a Release with the APK attached:
 
 ```bash
-git tag v1.0.0
-git push origin v1.0.0
+git tag v1.1.0
+git push origin v1.1.0
 ```
 
-Pour que les mises à jour s'installent par-dessus les versions précédentes, toutes les versions doivent être signées avec **la même clé**. Ajoute ces secrets au dépôt (*Settings › Secrets and variables › Actions*) :
+For updates to install over previous versions, every release must be signed with **the same key**. Store it in the repository secrets (*Settings › Secrets and variables › Actions*):
 
-| Secret | Contenu |
+| Secret | Value |
 |---|---|
-| `KEYSTORE_BASE64` | le fichier `.jks` encodé en base64 |
-| `KEYSTORE_PASSWORD` | mot de passe du keystore |
-| `KEY_ALIAS` | alias de la clé |
-| `KEY_PASSWORD` | mot de passe de la clé |
+| `KEYSTORE_BASE64` | the `.jks` file, base64-encoded |
+| `KEYSTORE_PASSWORD` | keystore password |
+| `KEY_ALIAS` | key alias |
+| `KEY_PASSWORD` | key password |
 
-Créer une clé et l'encoder :
+To create and encode a key:
 
 ```bash
 keytool -genkeypair -keystore release.jks -alias arr -keyalg RSA -keysize 2048 -validity 10000
 base64 -w0 release.jks        # Linux
-# Windows (PowerShell) : [Convert]::ToBase64String([IO.File]::ReadAllBytes("release.jks"))
+# Windows (PowerShell): [Convert]::ToBase64String([IO.File]::ReadAllBytes("release.jks"))
 ```
 
-Ne commite jamais le fichier `.jks` (il est déjà dans `.gitignore`).
+Never commit the `.jks` file. It is already listed in `.gitignore`.
 
-## Avertissement
+## Disclaimer
 
-Projet indépendant, **non affilié** aux équipes Radarr, Sonarr ou Prowlarr. Ces noms appartiennent à leurs projets respectifs. L'app se contente d'utiliser leurs API publiques. Utilise-la uniquement pour gérer des contenus que tu as le droit de télécharger.
+This is an independent project, **not affiliated** with the Radarr, Sonarr or Prowlarr teams. Those names belong to their respective projects, and this app only uses their public APIs. Only use it to manage content you have the right to download.
 
-## Licence
+## License
 
 [MIT](LICENSE)
