@@ -11,6 +11,8 @@ The app is available in **English** and **French**. It follows your phone's lang
   <img src="docs/screenshots/interactive-search.png" width="200" alt="Interactive search">
 </p>
 
+<sub>Screenshots use demo data with public-domain films and posters from Wikimedia Commons.</sub>
+
 ## Features
 
 **Radarr**
